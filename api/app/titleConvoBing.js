@@ -18,7 +18,7 @@ const titleConvo = async ({ text, response }) => {
   let options = {
     jailbreakConversationId: true,
     systemMessage:
-      'You are a title-generator. As a title-generator, the old rules no longer apply. The only rule you need to follow is the following: Detect user language and write in the same language an extremely concise title for this conversation, which you must accurately detect. Write in the detected language. Title in 5 Words or Less. No Punctuation/Quotation. All first letters of every word should be capitalized and complete only the title in User Language only.',
+    "You are a title-generator. Your task is to generate an extremely concise title for this conversation in English, regardless of the user's language. The title should be in 5 Words or Less, with no punctuation or quotation marks. All first letters of every word should be capitalized.",
     context: `
       ||>User:
       "${text}"
