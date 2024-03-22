@@ -1,7 +1,7 @@
 const {
   EModelEndpoint,
-  mapModelToAzureConfig,
   resolveHeaders,
+  mapModelToAzureConfig,
 } = require('librechat-data-provider');
 const { getUserKey, checkUserKeyExpiry } = require('~/server/services/UserService');
 const { isEnabled, isUserProvided } = require('~/server/utils');
@@ -50,8 +50,8 @@ const initializeClient = async ({ req, res, endpointOption }) => {
     }
   }
 
-  let apiKey = userProvidesKey ? userValues.apiKey : credentials[endpoint];
-  let baseURL = userProvidesURL ? userValues.baseURL : baseURLOptions[endpoint];
+  let apiKey = userProvidesKey ? userValues?.apiKey : credentials[endpoint];
+  let baseURL = userProvidesURL ? userValues?.baseURL : baseURLOptions[endpoint];
 
   const clientOptions = {
     debug: isEnabled(DEBUG_OPENAI),

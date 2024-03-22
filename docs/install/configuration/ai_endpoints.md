@@ -32,7 +32,8 @@ Some of the endpoints are marked as **Known,** which means they might have speci
       models:
         default: [
           "llama2-70b-4096",
-          "mixtral-8x7b-32768"
+          "mixtral-8x7b-32768",
+          "gemma-7b-it"
           ]
         fetch: false
       titleConvo: true
@@ -128,6 +129,33 @@ Some of the endpoints are marked as **Known,** which means they might have speci
 ```
 
 ![image](https://github.com/danny-avila/LibreChat/assets/32828263/9f2d8ad9-3f49-4fe3-a3ed-c85994c1c85f)
+
+## ShuttleAI
+> ShuttleAI API key: [shuttleai.app/keys](https://shuttleai.app/keys)
+
+**Notes:**
+
+- **Known:** icon provided, fetching list of models is recommended.
+
+```yaml
+    - name: "ShuttleAI"
+      apiKey: "${SHUTTLEAI_API_KEY}"
+      baseURL: "https://api.shuttleai.app/v1"
+      models:
+        default: [
+          "shuttle-1", "shuttle-turbo"
+          ]
+        fetch: true
+      titleConvo: true
+      titleModel: "gemini-pro"
+      summarize: false
+      summaryModel: "llama-summarize"
+      forcePrompt: false
+      modelDisplayLabel: "ShuttleAI"
+      dropParams: ["user"]
+```
+
+![image](https://raw.githubusercontent.com/danny-avila/LibreChat/main/client/public/assets/ShuttleAI_Fibonacci.png)
 
 ## Fireworks
 > Fireworks API key: [fireworks.ai/api-keys](https://fireworks.ai/api-keys)
@@ -259,5 +287,55 @@ Some of the endpoints are marked as **Known,** which means they might have speci
       forcePrompt: false
       modelDisplayLabel: "together.ai"
 ```
+## LiteLLM
+> LiteLLM API key: master_key value [LiteLLM](./litellm.md)
 
-![image](https://github.com/danny-avila/LibreChat/assets/32828263/fe3eae7a-d157-4f21-bb98-00688f261967)
+**Notes:**
+
+- Reference [LiteLLM](./litellm.md) for configuration.
+
+```yaml
+    - name: "LiteLLM"
+      apiKey: "sk-from-config-file"
+      baseURL: "http://localhost:8000/v1"
+      models:
+        default: ["gpt-3.5-turbo"]
+        fetch: true
+      titleConvo: true
+      titleModel: "gpt-3.5-turbo"
+      summarize: false
+      summaryModel: "gpt-3.5-turbo"
+      forcePrompt: false
+      modelDisplayLabel: "LiteLLM"
+```
+
+## Ollama
+> Ollama API key: Required but ignored - [Ollama OpenAI Compatibility](https://github.com/ollama/ollama/blob/main/docs/openai.md)
+
+**Notes:**
+
+- **Known:** icon provided.
+- **Known issue:** fetching list of models is not supported. See [Pull Request 2728](https://github.com/ollama/ollama/pull/2728).
+- Download models with ollama run command. See [Ollama Library](https://ollama.com/library)
+- The example includes a top 5 popular model list from the Ollama Library, which was last updated on March 1, 2024, for your convenience.
+
+```yaml
+    - name: "Ollama"
+      apiKey: "ollama"
+      baseURL: "http://localhost:11434/v1/"
+      models:
+        default: [
+          "llama2",
+          "mistral",
+          "codellama",
+          "dolphin-mixtral",
+          "mistral-openorca"
+          ]
+        fetch: false # fetching list of models is not supported
+      titleConvo: true
+      titleModel: "llama2"
+      summarize: false
+      summaryModel: "llama2"
+      forcePrompt: false
+      modelDisplayLabel: "Ollama"
+```

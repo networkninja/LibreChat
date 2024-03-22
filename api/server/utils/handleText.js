@@ -1,41 +1,19 @@
+const { Capabilities, defaultRetrievalModels } = require('librechat-data-provider');
+const { getCitations, citeText } = require('./citations');
 const partialRight = require('lodash/partialRight');
 const { sendMessage } = require('./streamResponse');
-const { getCitations, citeText } = require('./citations');
 const citationRegex = /\[\^\d+?\^]/g;
 
 const addSpaceIfNeeded = (text) => (text.length > 0 && !text.endsWith(' ') ? text + ' ' : text);
 
 const createOnProgress = ({ generation = '', onProgress: _onProgress }) => {
   let i = 0;
-  let code = '';
-  let precode = '';
-  let codeBlock = false;
   let tokens = addSpaceIfNeeded(generation);
 
   const progressCallback = async (partial, { res, text, bing = false, ...rest }) => {
     let chunk = partial === text ? '' : partial;
     tokens += chunk;
-    precode += chunk;
     tokens = tokens.replaceAll('[DONE]', '');
-
-    if (codeBlock) {
-      code += chunk;
-    }
-
-    if (precode.includes('```') && codeBlock) {
-      codeBlock = false;
-      precode = precode.replace(/```/g, '');
-      code = '';
-    }
-
-    if (precode.includes('```') && code === '') {
-      precode = precode.replace(/```/g, '');
-      codeBlock = true;
-    }
-
-    if (tokens.match(/^\n(?!:::plugins:::)/)) {
-      tokens = tokens.replace(/^\n/, '');
-    }
 
     if (bing) {
       tokens = citeText(tokens, true);
@@ -178,7 +156,7 @@ const isUserProvided = (value) => value === 'user_provided';
  * @param {string} baseURL
  * @returns {boolean | { userProvide: boolean, userProvideURL?: boolean }}
  */
-function generateConfig(key, baseURL) {
+function generateConfig(key, baseURL, assistants = false) {
   if (!key) {
     return false;
   }
@@ -188,6 +166,16 @@ function generateConfig(key, baseURL) {
 
   if (baseURL) {
     config.userProvideURL = isUserProvided(baseURL);
+  }
+
+  if (assistants) {
+    config.retrievalModels = defaultRetrievalModels;
+    config.capabilities = [
+      Capabilities.code_interpreter,
+      Capabilities.retrieval,
+      Capabilities.actions,
+      Capabilities.tools,
+    ];
   }
 
   return config;
