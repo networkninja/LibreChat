@@ -247,7 +247,6 @@ router.post('/', validateModel, buildEndpointOption, setHeaders, async (req, res
       }
 
       finalEvent = {
-        title: 'New Chat',
         final: true,
         conversation: await getConvo(req.user.id, conversationId),
         runMessages,
@@ -477,7 +476,6 @@ router.post('/', validateModel, buildEndpointOption, setHeaders, async (req, res
 
       conversation = {
         conversationId,
-        title: 'New Chat',
         endpoint: EModelEndpoint.assistants,
         promptPrefix: promptPrefix,
         instructions: instructions,
@@ -597,7 +595,7 @@ router.post('/', validateModel, buildEndpointOption, setHeaders, async (req, res
 
     /** @type {ResponseMessage} */
     const responseMessage = {
-      ...response.finalMessage,
+      ...(response.responseMessage ?? response.finalMessage),
       parentMessageId: userMessageId,
       conversationId,
       user: req.user.id,
@@ -607,7 +605,6 @@ router.post('/', validateModel, buildEndpointOption, setHeaders, async (req, res
     };
 
     sendMessage(res, {
-      title: 'New Chat',
       final: true,
       conversation,
       requestMessage: {
