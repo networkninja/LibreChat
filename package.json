@@ -100,5 +100,9 @@
       "admin/",
       "packages/"
     ]
+  },
+  "dependencies": {
+    "@sentry/node": "^8.8.0",
+    "@sentry/profiling-node": "^8.8.0"
   }
 }

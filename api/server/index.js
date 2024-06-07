@@ -18,6 +18,9 @@ const { logger } = require('~/config');
 
 const routes = require('./routes');
 
+// Sentry Initialization
+require('./instrument.js');
+
 const { PORT, HOST, ALLOW_SOCIAL_LOGIN } = process.env ?? {};
 
 const port = Number(PORT) || 3080;
