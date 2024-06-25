@@ -103,23 +103,16 @@ router.post(
       },
     });
 
-    const onAgentAction = (action, start = false) => {
-      const formattedAction = formatAction(action);
-      plugin.inputs.push(formattedAction);
-      plugin.latest = formattedAction.plugin;
-      if (!start) {
-        saveMessage({ ...userMessage, user });
-      }
-      sendIntermediateMessage(res, { plugin });
-      // logger.debug('PLUGIN ACTION', formattedAction);
-    };
-
     const onChainEnd = (data) => {
       let { intermediateSteps: steps } = data;
       plugin.outputs = steps && steps[0].action ? formatSteps(steps) : 'An error occurred.';
       plugin.loading = false;
       saveMessage({ ...userMessage, user });
-      sendIntermediateMessage(res, { plugin });
+      sendIntermediateMessage(res, {
+        plugin,
+        parentMessageId: userMessage.messageId,
+        messageId: responseMessageId,
+      });
       // logger.debug('CHAIN END', plugin.outputs);
     };
 
@@ -133,11 +126,26 @@ router.post(
       userMessage,
       promptTokens,
     });
-    const { abortController, onStart } = createAbortController(req, res, getAbortData);
+    const { abortController, onStart } = createAbortController(req, res, getAbortData, getReqData);
 
     try {
       endpointOption.tools = await validateTools(user, endpointOption.tools);
       const { client } = await initializeClient({ req, res, endpointOption });
+
+      const onAgentAction = (action, start = false) => {
+        const formattedAction = formatAction(action);
+        plugin.inputs.push(formattedAction);
+        plugin.latest = formattedAction.plugin;
+        if (!start && !client.skipSaveUserMessage) {
+          saveMessage({ ...userMessage, user });
+        }
+        sendIntermediateMessage(res, {
+          plugin,
+          parentMessageId: userMessage.messageId,
+          messageId: responseMessageId,
+        });
+        // logger.debug('PLUGIN ACTION', formattedAction);
+      };
 
       let response = await client.sendMessage(text, {
         user,
@@ -153,12 +161,13 @@ router.post(
         onChainEnd,
         onStart,
         ...endpointOption,
-        onProgress: progressCallback.call(null, {
+        progressCallback,
+        progressOptions: {
           res,
           text,
           plugin,
-          parentMessageId: overrideParentMessageId || userMessageId,
-        }),
+          // parentMessageId: overrideParentMessageId || userMessageId,
+        },
         abortController,
       });
 

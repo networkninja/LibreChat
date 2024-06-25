@@ -81,7 +81,7 @@ const EditController = async (req, res, next, initializeClient) => {
     promptTokens,
   });
 
-  const { abortController, onStart } = createAbortController(req, res, getAbortData);
+  const { abortController, onStart } = createAbortController(req, res, getAbortData, getReqData);
 
   res.on('close', () => {
     logger.debug('[EditController] Request closed');
@@ -112,11 +112,12 @@ const EditController = async (req, res, next, initializeClient) => {
       getReqData,
       onStart,
       abortController,
-      onProgress: progressCallback.call(null, {
+      progressCallback,
+      progressOptions: {
         res,
         text,
-        parentMessageId: overrideParentMessageId || userMessageId,
-      }),
+        // parentMessageId: overrideParentMessageId || userMessageId,
+      },
     });
 
     const conversation = await getConvo(user, conversationId);
