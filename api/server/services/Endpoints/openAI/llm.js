@@ -57,7 +57,7 @@ function getLLMConfig(apiKey, options = {}) {
   const configOptions = {};
 
   // Handle OpenRouter or custom reverse proxy
-  if (useOpenRouter || reverseProxyUrl === 'https://openrouter.ai/api/v1') {
+  if (useOpenRouter || (reverseProxyUrl && reverseProxyUrl.includes('https://openrouter.ai/api/v1'))) {
     configOptions.basePath = 'https://openrouter.ai/api/v1';
     configOptions.baseOptions = {
       headers: Object.assign(
