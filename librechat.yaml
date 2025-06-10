@@ -1,0 +1,95 @@
+---
+# For more information, see the Configuration Guide:
+# https://docs.librechat.ai/install/configuration/custom_config.html
+
+# Configuration version (required)
+version: 1.1.7
+
+# Cache settings: Set to true to enable caching
+cache: true
+
+includedTools: ['dalle']
+
+interface:
+  endpointsMenu: true
+  modelSelect: true
+  parameters: true
+  sidePanel: true
+  presets: true
+  prompts: true
+  bookmarks: true
+  multiConvo: true
+
+registration:
+  socialLogins: ["google"]
+  allowedDomains:
+    - "networkninja.com"
+    - "legalserver.org"
+    - "contractor.networkninja.com"
+
+# Definition of custom endpoints
+fileConfig:
+  endpoints:
+    assistants:
+      fileLimit: 5000
+      fileSizeLimit: 512
+      totalSizeLimit: 512
+      supportedMimeTypes: 
+        - "image/.*"
+        - "application/.*"
+        - "text/.*"
+        - "video/.*"
+    openAI:
+      disabled: true
+    azureOpenAI:
+      disabled: false
+    default:
+      totalSizeLimit: 512
+      supportedMimeTypes:
+        - "image/.*"
+        - "application/.*"
+        - "text/.*"
+  serverFileSizeLimit: 512
+  avatarSizeLimit: 4
+rateLimits:
+  fileUploads:
+    ipMax: 100
+    ipWindowInMinutes: 60
+    userMax: 100
+    userWindowInMinutes: 60
+  stt:
+    userMax: 10
+    userWindowInMinutes: 1
+  tts:
+    userMax: 45
+    userWindowInMinutes: 1
+endpoints:
+  agents:
+    disableBuilder: false
+    capabilities: ["execute_code", "file_search", "tools"]
+  azureAssistants:
+    disableBuilder: false
+    privateAssistants: true
+    pollIntervalMs: 500
+    timeoutMs: 10000
+    capabilities: ["code_interpreter"]
+
+  custom:
+    - name: "NNI Models"
+      apiKey: "LITELLM KEY HERE"
+      baseURL: "https://aimlapi-dev.networkninja.com/v1"
+      models:
+        default: ["gpt-4o-0806"]
+        fetch: true
+      titleConvo: true
+      titleModel: "gpt-4o-0806"
+      modelDisplayLabel: "networkninja personal"
+
+mcpServers:
+  github: 
+    command: npx
+    args:
+      - -y
+      - "/app/node_modules/.bin/mcp-server-github"
+    env: 
+      GITHUB_PERSONAL_ACCESS_TOKEN": XXX
