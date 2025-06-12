@@ -92,4 +92,4 @@ mcpServers:
       - -y
       - "/app/node_modules/.bin/mcp-server-github"
     env: 
-      GITHUB_PERSONAL_ACCESS_TOKEN": XXX
+      GITHUB_PERSONAL_ACCESS_TOKEN: XXX
