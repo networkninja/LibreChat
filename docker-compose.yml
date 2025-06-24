@@ -8,6 +8,16 @@ services:
     restart: always
     ports:
       - "8080:80"
+  mcp-atlassian:
+    container_name: mcp-atlassian
+    image: ghcr.io/sooperset/mcp-atlassian:latest
+    command: --transport sse --port 9000 -vv
+    ports:
+      - "9000:9000"
+    env_file:
+      - PATH/TO/servers/mcp-atlassian/.env
+    restart: always
+
 
   api:
     container_name: LibreChat
