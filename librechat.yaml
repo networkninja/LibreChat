@@ -93,3 +93,20 @@ mcpServers:
       - "/app/node_modules/.bin/mcp-server-github"
     env: 
       GITHUB_PERSONAL_ACCESS_TOKEN: XXX
+  sentry:
+    command: uv
+    args:
+      - --directory
+      - /app/servers/mcp_server_sentry
+      - run
+      - server.py
+      - --sentry_auth_token
+      - "YOUR AUTH TOKEN HERE"
+      - --sentry_organization_slug
+      - "ORG NAME HERE"
+      - --sentry_organization_id
+      - "ORG ID HERE"
+  mcp-atlassian:
+    url: http://mcp-atlassian:9000/sse
+
+
