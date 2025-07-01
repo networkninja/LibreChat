@@ -163,7 +163,7 @@ git push origin main --force
 ## Need Help?
 
 - Join the [LibreChat Discord](https://discord.librechat.ai)
-- Tag @josh or the dev lead in Slack
+- Reach out to Josh Mullin (@jmullin) on Slack
 
 ---
 
