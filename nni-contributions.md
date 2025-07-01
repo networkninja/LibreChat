@@ -151,12 +151,6 @@ git push origin main --force
 
 ---
 
-## 📋 Quick Checklist for Upstream PRs
-
--
-
----
-
 ## 🧼 Formatting & Naming Conventions
 
 - **Branch names:** `feature/x`, `fix/bug`, `internal/xyz`
