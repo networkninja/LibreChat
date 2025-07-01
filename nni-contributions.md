@@ -59,14 +59,14 @@ Make sure all changes adhere to the steps in the **Development Setup**, **Develo
 
 ## ✅ How to Contribute Code Upstream
 
-1. **Start from a clean `main`:**
+1. **Start from a clean ****\`\`****:**
 
    ```bash
    git checkout main
    git pull upstream main
    ```
 
-2. **Create a new feature branch off `main`**
+2. **Create a new feature branch off ****\`\`****:**
 
    ```bash
    git checkout -b feature/short-description
@@ -77,7 +77,6 @@ Make sure all changes adhere to the steps in the **Development Setup**, **Develo
 3. **Make your changes** and ensure they meet the upstream guidelines:
 
    - Follow commit conventions: `feat: add X`, `fix: correct Y`
-   - Do not include NNI ticket numbers in your commit messages for features being sent back to upstream.
    - Run linting, tests, and builds
    - Clear localStorage and cookies in your browser if your feature touches auth, session handling, or persistent app settings. This ensures you're not affected by stale values during testing.
 
@@ -95,9 +94,9 @@ Make sure all changes adhere to the steps in the **Development Setup**, **Develo
 
 6. **Open a PR upstream:**
 
-   - Go to `https://github.com/danny-avila/LibreChat/compare/main...networkninja:LibreChat:main`
-   - Use your branch as the head
-   - Describe the changes clearly, referencing related issues, following the contribution guidelines for LibreChat
+   - Go to `https://github.com/danny-avila/LibreChat`
+   - Use your branch as the base
+   - Describe the changes clearly, referencing related issues
 
 7. **Follow Upstream Review Guidelines:**
 
@@ -108,7 +107,7 @@ Make sure all changes adhere to the steps in the **Development Setup**, **Develo
 
 ## 🏗️ Working on Internal Features
 
-1. **Start from `nni-main`:**
+1. **Start from ****\`\`****:**
 
    ```bash
    git checkout nni-main
@@ -123,7 +122,7 @@ Make sure all changes adhere to the steps in the **Development Setup**, **Develo
 
 3. **Implement and test locally.**
 
-4. **Merge back into `nni-main` once validated:**
+4. **Merge back into ****\`\`**** once validated:**
 
    ```bash
    git checkout nni-main
@@ -151,6 +150,12 @@ git push origin main --force
 
 ---
 
+## 📋 Quick Checklist for Upstream PRs
+
+-
+
+---
+
 ## 🧼 Formatting & Naming Conventions
 
 - **Branch names:** `feature/x`, `fix/bug`, `internal/xyz`
@@ -163,7 +168,7 @@ git push origin main --force
 ## Need Help?
 
 - Join the [LibreChat Discord](https://discord.librechat.ai)
-- Reach out to Josh Mullin (@jmullin) on Slack
+- Tag @josh or the dev lead in Slack
 
 ---
 
