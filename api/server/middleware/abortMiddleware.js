@@ -1,5 +1,6 @@
 // abortMiddleware.js
 const { isAssistantsEndpoint, ErrorTypes } = require('librechat-data-provider');
+const { getCustomConfig } = require('~/server/services/Config');
 const { sendMessage, sendError, countTokens, isEnabled } = require('~/server/utils');
 const { truncateText, smartTruncateText } = require('~/app/clients/prompts');
 const clearPendingReq = require('~/cache/clearPendingReq');
@@ -302,6 +303,7 @@ const createAbortController = (req, res, getAbortData, getReqData) => {
  * @returns { Promise<void> }
  */
 const handleAbortError = async (res, req, error, data) => {
+  const customConfig = await getCustomConfig();
   if (error?.message?.includes('base64')) {
     logger.error('[handleAbortError] Error in base64 encoding', {
       ...error,
@@ -319,9 +321,14 @@ const handleAbortError = async (res, req, error, data) => {
     );
   }
 
+  //set custom Error message from Configrs
+  let customErrorMessage = customConfig?.interface.customErrorMessage
+    ? customConfig?.interface.customErrorMessage
+    : 'Please contact the Admin.';
+
   let errorText = error?.message?.includes('"type"')
     ? error.message
-    : 'An error occurred while processing your request. Please contact the Admin.';
+    : 'An error occurred while processing your request. ' + customErrorMessage;
 
   if (error?.type === ErrorTypes.INVALID_REQUEST) {
     errorText = `{"type":"${ErrorTypes.INVALID_REQUEST}"}`;
