@@ -27,9 +27,11 @@ async function getCustomConfigSpeech(req, res) {
 
     const sttExternal = !!customConfig.speech?.stt;
     const ttsExternal = !!customConfig.speech?.tts;
+    const browserDisabled = !!customConfig.speech?.speechTab.browserDisabled;
     let settings = {
       sttExternal,
       ttsExternal,
+      browserDisabled,
     };
 
     if (!appConfig.speech?.speechTab) {
@@ -40,6 +42,10 @@ async function getCustomConfigSpeech(req, res) {
 
     if (speechTab.advancedMode !== undefined) {
       settings.advancedMode = speechTab.advancedMode;
+    }
+
+    if (speechTab.browserDisabled !== undefined) {
+      settings.browserDisabled = speechTab.browserDisabled;
     }
 
     if (speechTab.speechToText !== undefined) {
