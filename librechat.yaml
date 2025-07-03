@@ -27,6 +27,9 @@ registration:
     - "networkninja.com"
     - "legalserver.org"
     - "contractor.networkninja.com"
+speech:
+  speechTab:
+    browserDisabled: true
 
 # Definition of custom endpoints
 fileConfig:
