@@ -6,18 +6,27 @@ import store from '~/store';
 
 interface EngineTTSDropdownProps {
   external: boolean;
+  browserDisabled: boolean;
 }
 
-const EngineTTSDropdown: React.FC<EngineTTSDropdownProps> = ({ external }) => {
+const EngineTTSDropdown: React.FC<EngineTTSDropdownProps> = ({ external, browserDisabled }) => {
   const localize = useLocalize();
   const [engineTTS, setEngineTTS] = useRecoilState<string>(store.engineTTS);
 
-l const endpointOptions = external
-    ? [
+  let endpointOptions = [{ value: 'browser', label: localize('com_nav_browser') }];
+  if (browserDisabled === true) {
+    //used to set value if browswerDisable value is changed after initiation, not sure if necessary
+    setEngineTTS('external');
+    endpointOptions = [{ value: 'external', label: localize('com_nav_external') }];
+  } else if (external && (browserDisabled === false || !browserDisabled)) {
+    endpointOptions = [
       { value: 'browser', label: localize('com_nav_browser') },
       { value: 'external', label: localize('com_nav_external') },
-    ]
-    : [{ value: 'browser', label: localize('com_nav_browser') }];
+    ];
+  } else if (browserDisabled === false || !browserDisabled) {
+    //used to set value if browswerDisable value is changed after initiation, not sure if necessary
+    setEngineTTS('browser');
+  }
 
   const handleSelect = (value: string) => {
     setEngineTTS(value);

@@ -322,13 +322,9 @@ const handleAbortError = async (res, req, error, data) => {
   }
 
   //set custom Error message from Configrs
-  let customErrorMessage = customConfig?.interface.customErrorMessage
-    ? customConfig?.interface.customErrorMessage
-    : 'Please contact the Admin.';
-
-  let errorText = error?.message?.includes('"type"')
-    ? error.message
-    : 'An error occurred while processing your request. ' + customErrorMessage;
+  let customErrorMessage = customConfig?.interface.customErrorMessage ? customConfig?.interface.customErrorMessage : 'Please contact the Admin.';
+  
+  let errorText = error?.message?.includes('"type"') ? error.message : 'An error occurred while processing your request. ' + customErrorMessage;
 
   if (error?.type === ErrorTypes.INVALID_REQUEST) {
     errorText = `{"type":"${ErrorTypes.INVALID_REQUEST}"}`;
