@@ -6,27 +6,19 @@ import store from '~/store';
 
 interface EngineSTTDropdownProps {
   external: boolean;
-  browserDisabled: boolean;
 }
 
-const EngineSTTDropdown: React.FC<EngineSTTDropdownProps> = ({ external, browserDisabled }) => {
+const EngineSTTDropdown: React.FC<EngineSTTDropdownProps> = ({ external }) => {
   const localize = useLocalize();
   const [engineSTT, setEngineSTT] = useRecoilState<string>(store.engineSTT);
 
-  let endpointOptions = [{ value: 'browser', label: localize('com_nav_browser') }];
-  if (browserDisabled === true) {
-    //used to set value if browswerDisable value is changed after initiation, not sure if necessary
-    setEngineSTT('external');
-    endpointOptions = [{ value: 'external', label: localize('com_nav_external') }];
-  } else if (external && (browserDisabled === false || !browserDisabled)) {
-    endpointOptions = [
+   const endpointOptions = external
+    ? [
       { value: 'browser', label: localize('com_nav_browser') },
       { value: 'external', label: localize('com_nav_external') },
-    ];
-  } else if (browserDisabled === false) {
-    //used to set value if browswerDisable value is changed after initiation, not sure if necessary
-    setEngineSTT('browser');
-  }
+    ]
+    : [{ value: 'browser', label: localize('com_nav_browser') }];
+
 
   const handleSelect = (value: string) => {
     setEngineSTT(value);
