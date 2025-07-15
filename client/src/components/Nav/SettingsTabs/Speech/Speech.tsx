@@ -34,7 +34,6 @@ function Speech() {
 
   const [sttExternal, setSttExternal] = useState(false);
   const [ttsExternal, setTtsExternal] = useState(false);
-  const [browserDisabled, setBrowserDisabled] = useRecoilState(store.browserDisabled);
   const [advancedMode, setAdvancedMode] = useRecoilState(store.advancedMode);
   const [autoTranscribeAudio, setAutoTranscribeAudio] = useRecoilState(store.autoTranscribeAudio);
   const [conversationMode, setConversationMode] = useRecoilState(store.conversationMode);
@@ -59,7 +58,6 @@ function Speech() {
       const settings = {
         sttExternal: { value: sttExternal, setFunc: setSttExternal },
         ttsExternal: { value: ttsExternal, setFunc: setTtsExternal },
-        browserDisabled: { value: browserDisabled, setFunc: setBrowserDisabled },
         conversationMode: { value: conversationMode, setFunc: setConversationMode },
         advancedMode: { value: advancedMode, setFunc: setAdvancedMode },
         speechToText: { value: speechToText, setFunc: setSpeechToText },
@@ -108,7 +106,6 @@ function Speech() {
       languageTTS,
       automaticPlayback,
       playbackRate,
-      browserDisabled,
       setSttExternal,
       setTtsExternal,
       setConversationMode,
@@ -127,7 +124,6 @@ function Speech() {
       setLanguageTTS,
       setAutomaticPlayback,
       setPlaybackRate,
-      setBrowserDisabled,
     ],
   );
 
@@ -193,11 +189,11 @@ function Speech() {
       <Tabs.Content value={'simple'}>
         <div className="flex flex-col gap-3 text-sm text-text-primary">
           <SpeechToTextSwitch />
-          <EngineSTTDropdown external={sttExternal} browserDisabled={browserDisabled} />
+          <EngineSTTDropdown external={sttExternal} />
           <LanguageSTTDropdown />
           <div className="h-px bg-border-medium" role="none" />
           <TextToSpeechSwitch />
-          <EngineTTSDropdown external={ttsExternal} browserDisabled={browserDisabled} />
+          <EngineTTSDropdown external={ttsExternal} />
           <VoiceDropdown />
         </div>
       </Tabs.Content>
@@ -208,7 +204,7 @@ function Speech() {
           <div className="mt-2 h-px bg-border-medium" role="none" />
           <SpeechToTextSwitch />
 
-          <EngineSTTDropdown external={sttExternal} browserDisabled={browserDisabled} />
+          <EngineSTTDropdown external={sttExternal} />
 
           <LanguageSTTDropdown />
           <div className="pb-2">
@@ -227,7 +223,7 @@ function Speech() {
             <TextToSpeechSwitch />
           </div>
           <AutomaticPlaybackSwitch />
-          <EngineTTSDropdown external={ttsExternal} browserDisabled={browserDisabled} />
+          <EngineTTSDropdown external={ttsExternal} />
           <VoiceDropdown />
           {engineTTS === 'browser' && (
             <div className="pb-2">

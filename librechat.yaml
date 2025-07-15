@@ -19,7 +19,7 @@ interface:
   prompts: true
   bookmarks: true
   multiConvo: true
-  customErrorMessage: 'Please refresh the page and retry your request. If the problem persists, please contact an Admin.'
+
 
 registration:
   socialLogins: ["google"]
@@ -27,9 +27,6 @@ registration:
     - "networkninja.com"
     - "legalserver.org"
     - "contractor.networkninja.com"
-speech:
-  speechTab:
-    browserDisabled: true
 
 # Definition of custom endpoints
 fileConfig:

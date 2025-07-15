@@ -389,7 +389,6 @@ const speechTab = z
   .object({
     conversationMode: z.boolean().optional(),
     advancedMode: z.boolean().optional(),
-    browserDisabled: z.boolean().optional(),
     speechToText: z
       .boolean()
       .optional()
