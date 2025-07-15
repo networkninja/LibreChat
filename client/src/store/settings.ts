@@ -54,7 +54,6 @@ const localStorageAtoms = {
   // Speech settings
   conversationMode: atomWithLocalStorage('conversationMode', false),
   advancedMode: atomWithLocalStorage('advancedMode', false),
-  browserDisabled: atomWithLocalStorage('browserDisabled', false),
 
   speechToText: atomWithLocalStorage('speechToText', true),
   engineSTT: atomWithLocalStorage('engineSTT', 'browser'),
