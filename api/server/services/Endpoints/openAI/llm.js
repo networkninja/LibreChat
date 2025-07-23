@@ -103,6 +103,10 @@ function getLLMConfig(apiKey, options = {}, endpoint = null) {
     }
   }
 
+  if(llmConfig.modelOptions.thinking || llmConfig.modelOptions.reasoning_effort){
+    llmConfig.modelOptions.thinking = true;
+  }
+
   if (defaultQuery) {
     configOptions.defaultQuery = defaultQuery;
   }

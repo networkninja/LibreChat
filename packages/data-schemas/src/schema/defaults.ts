@@ -131,7 +131,7 @@ export const conversationPreset = {
   max_tokens: {
     type: Number,
   },
-  /** omni models only */
+  /** omni models only and antropic with liteLLM */
   reasoning_effort: {
     type: String,
   },

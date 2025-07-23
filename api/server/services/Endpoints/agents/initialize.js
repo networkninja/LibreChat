@@ -233,6 +233,11 @@ const initializeAgentOptions = async ({
     endpointOption: _endpointOption,
   });
 
+   if (!options.reasoning_effort || !agent.reasoning_effort) {
+    options.reasoning_effort = agent.reasoning_effort ?? model_parameters.reasoning_effort;
+    agent.reasoning_effort = agent.reasoning_effort ? model_parameters.reasoning_effort : 'none';
+  }
+
   if (
     agent.endpoint === EModelEndpoint.azureOpenAI &&
     options.llmConfig?.azureOpenAIApiInstanceName == null
@@ -349,6 +354,17 @@ const initializeClient = async ({ req, res, endpointOption }) => {
       });
       agentConfigs.set(agentId, config);
     }
+  }
+
+  if (!modelOptions.addParams){
+    modelOptions.addParams = {};
+  }
+
+  modelOptions.addParams.reasoning_effort =
+    modelOptions.reasoning_effort ?? modelOptions.reasoning_effort;
+
+  modelOptions.addParams.reasoning = {
+    effort: modelOptions.reasoning_effort ? modelOptions.reasoning : 'medium',
   }
 
   const sender =

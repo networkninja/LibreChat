@@ -381,11 +381,23 @@ export const agentsSettings = {
   resendFiles: {
     default: true as const,
   },
+  thinking: {
+    default: true as const,
+  },
+  thinkingBudget: {
+    min: 1024 as const,
+    step: 100 as const,
+    max: 200000 as const,
+    default: 2000 as const,
+  },
   maxContextTokens: {
     default: undefined,
   },
   max_tokens: {
     default: undefined,
+  },
+  reasoning_effort: {
+    default: true as const,
   },
   imageDetail: {
     default: ImageDetail.auto as const,
@@ -597,6 +609,7 @@ export const tConversationSchema = z.object({
   maxOutputTokens: coerceNumber.optional(),
   maxContextTokens: coerceNumber.optional(),
   max_tokens: coerceNumber.optional(),
+  reasoning_effort: z.string().nullable().optional(),
   /* Anthropic */
   promptCache: z.boolean().optional(),
   system: z.string().optional(),
@@ -714,6 +727,8 @@ export const tQueryParamsSchema = tConversationSchema
     top_p: true,
     /** @endpoints openAI, custom, azureOpenAI */
     max_tokens: true,
+    /** @endpoints openAI, custom, azureOpenAI */
+    reasoning_effort: true,
     /** @endpoints google, anthropic, bedrock */
     topP: true,
     /** @endpoints google, anthropic */
@@ -976,6 +991,7 @@ export const agentsBaseSchema = tConversationSchema.pick({
   iconURL: true,
   greeting: true,
   maxContextTokens: true,
+  reasoning_effort: true,
 });
 
 export const agentsSchema = agentsBaseSchema
@@ -996,6 +1012,7 @@ export const agentsSchema = agentsBaseSchema
     iconURL: obj.iconURL ?? undefined,
     greeting: obj.greeting ?? undefined,
     maxContextTokens: obj.maxContextTokens ?? undefined,
+    reasoning_effort: obj.reasoning_effort ?? undefined,
   }))
   .catch(() => ({
     model: agentsSettings.model.default,
@@ -1012,6 +1029,7 @@ export const agentsSchema = agentsBaseSchema
     iconURL: undefined,
     greeting: undefined,
     maxContextTokens: undefined,
+    reasoning_effort: undefined,
   }));
 
 export const openAIBaseSchema = tConversationSchema.pick({
