@@ -115,6 +115,17 @@ const initializeClient = async ({ req, res, endpointOption }) => {
     }
   }
 
+  if (!modelOptions.addParams){
+    modelOptions.addParams = {};
+  }
+
+  modelOptions.addParams.reasoning_effort =
+    modelOptions.reasoning_effort ?? modelOptions.reasoning_effort;
+
+  modelOptions.addParams.reasoning = {
+    effort: modelOptions.reasoning_effort ? modelOptions.reasoning : 'medium',
+  }
+
   let endpointConfig = req.app.locals[primaryConfig.endpoint];
   if (!isAgentsEndpoint(primaryConfig.endpoint) && !endpointConfig) {
     try {

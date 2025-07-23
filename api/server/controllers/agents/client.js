@@ -80,7 +80,15 @@ const payloadParser = ({ req, agent, endpoint }) => {
   return req.body.endpointOption.model_parameters;
 };
 
-const noSystemModelRegex = [/\b(o1-preview|o1-mini|amazon\.titan-text)\b/gi];
+const legacyContentEndpoints = new Set([KnownEndpoints.groq, KnownEndpoints.deepseek]);
+
+const noSystemModelRegex = [
+  /\b(o1-preview|o1-mini|amazon\.titan-text|anthropic|claude|claude-instant|claude-2|claude-3)\b/gi,
+];
+
+// const { processMemory, memoryInstructions } = require('~/server/services/Endpoints/agents/memory');
+// const { getFormattedMemories } = require('~/models/Memory');
+// const { getCurrentDateTime } = require('~/utils');
 
 function createTokenCounter(encoding) {
   return function (message) {

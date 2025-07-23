@@ -164,6 +164,7 @@ export type AgentModelParameters = {
   top_p: AgentParameterValue;
   frequency_penalty: AgentParameterValue;
   presence_penalty: AgentParameterValue;
+  reasoning_effort: AgentParameterValue;
 };
 
 export interface AgentBaseResource {
