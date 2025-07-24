@@ -625,7 +625,6 @@ export const tConversationSchema = z.object({
   maxOutputTokens: coerceNumber.optional(),
   maxContextTokens: coerceNumber.optional(),
   max_tokens: coerceNumber.optional(),
-  reasoning_effort: z.string().nullable().optional(),
   /* Anthropic */
   promptCache: z.boolean().optional(),
   system: z.string().optional(),
