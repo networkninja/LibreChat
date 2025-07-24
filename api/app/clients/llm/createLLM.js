@@ -76,6 +76,7 @@ function createLLM({
       callbacks,
     },
     configOptions,
+    modelOptions.reasoning_effort,
   );
 }
 

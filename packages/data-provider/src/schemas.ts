@@ -609,7 +609,6 @@ export const tConversationSchema = z.object({
   maxOutputTokens: coerceNumber.optional(),
   maxContextTokens: coerceNumber.optional(),
   max_tokens: coerceNumber.optional(),
-  reasoning_effort: z.string().nullable().optional(),
   /* Anthropic */
   promptCache: z.boolean().optional(),
   system: z.string().optional(),
@@ -629,7 +628,7 @@ export const tConversationSchema = z.object({
   file_ids: z.array(z.string()).optional(),
   /* vision */
   imageDetail: eImageDetailSchema.optional(),
-  /* OpenAI: o1 only */
+  /* OpenAI: o1 only or CUSTOM REASONING */
   reasoning_effort: eReasoningEffortSchema.optional(),
   /* assistant */
   assistant_id: z.string().optional(),
