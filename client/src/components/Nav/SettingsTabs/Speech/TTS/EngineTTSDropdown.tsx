@@ -12,7 +12,7 @@ const EngineTTSDropdown: React.FC<EngineTTSDropdownProps> = ({ external }) => {
   const localize = useLocalize();
   const [engineTTS, setEngineTTS] = useRecoilState<string>(store.engineTTS);
 
-l const endpointOptions = external
+const endpointOptions = external
     ? [
       { value: 'browser', label: localize('com_nav_browser') },
       { value: 'external', label: localize('com_nav_external') },
