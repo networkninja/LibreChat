@@ -78,6 +78,50 @@ function logToolError(graph, error, toolId) {
   );
 }
 
+function extractAdditionalKwargs(data) {
+  // Create a copy of the original data
+  const result = { ...data.chunk };
+  
+  // Check if additional_kwargs exists in the data
+  if (result.additional_kwargs) {
+    // Extract reasoning_content from the nested structure
+    let reasoningContent = null;
+    if (result.additional_kwargs.__raw_response && 
+        result.additional_kwargs.__raw_response.choices && 
+        result.additional_kwargs.__raw_response.choices[0] && 
+        result.additional_kwargs.__raw_response.choices[0].delta) {
+      reasoningContent = result.additional_kwargs.__raw_response.choices[0].delta.reasoning_content;
+    }
+    
+    // Replace the entire additional_kwargs with an object containing only reasoning_content
+    result.additional_kwargs = { 
+      reasoning_content: reasoningContent 
+    };
+  }
+  
+  // Also handle the case where additional_kwargs is in lc_kwargs
+  if (result.lc_kwargs && result.lc_kwargs.additional_kwargs) {
+    // Extract additional_kwargs from kwargs and place at top level
+    const { additional_kwargs, ...restKwargs } = result.lc_kwargs;
+    result.lc_kwargs = restKwargs;
+    
+    // Extract reasoning_content from the nested structure
+    let reasoningContent = null;
+    if (additional_kwargs.__raw_response && 
+        additional_kwargs.__raw_response.choices && 
+        additional_kwargs.__raw_response.choices[0] && 
+        additional_kwargs.__raw_response.choices[0].delta) {
+      reasoningContent = additional_kwargs.__raw_response.choices[0].delta.reasoning_content;
+    }
+    
+    // Set additional_kwargs to only contain reasoning_content
+    result.additional_kwargs = { 
+      reasoning_content: reasoningContent 
+    };
+  }
+  
+  return result;
+}
 class AgentClient extends BaseClient {
   constructor(options = {}) {
     super(null, options);
@@ -741,7 +785,36 @@ class AgentClient extends BaseClient {
           req: this.options.req,
           runId: this.responseMessageId,
           signal: abortController.signal,
-          customHandlers: this.options.eventHandlers,
+          customHandlers: {
+            ...this.options.eventHandlers,
+            //needed to parse thinking values for LiteLLM, comes in as a different format
+            [GraphEvents.CHAT_MODEL_STREAM]: {
+              /**
+               * Handle CHAT_MODEL_STREAM event.
+               * @param {string} event - The event name.
+               * @param {StreamEventData} data - The event data.
+               * @param {GraphRunnableConfig['configurable']} [metadata] The runnable metadata.
+               */
+              handle: (event, data, metadata, graph) => {
+                // console.log("CUSTOM HANDLER", {
+                //   event,
+                //     data: JSON.stringify(data.chunk.lc_kwargs),
+                // });
+
+                if(data.chunk?.lc_kwargs?.additional_kwargs?.__raw_response?.choices?.[0]?.delta?.reasoning_content){
+                  data.chunk = extractAdditionalKwargs(data);
+                }
+                if (this.options.eventHandlers[GraphEvents.CHAT_MODEL_STREAM]) {
+                  this.options.eventHandlers?.[GraphEvents.CHAT_MODEL_STREAM].handle(
+                    event,
+                    data,
+                    metadata,
+                    graph,
+                  );
+                }
+              },
+            },
+          },
         });
 
         if (!run) {

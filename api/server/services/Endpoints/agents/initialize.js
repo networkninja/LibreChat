@@ -233,11 +233,18 @@ const initializeAgentOptions = async ({
     endpointOption: _endpointOption,
   });
 
-   if (!options.reasoning_effort || !agent.reasoning_effort) {
-    options.reasoning_effort = agent.reasoning_effort ?? model_parameters.reasoning_effort;
-    agent.reasoning_effort = agent.reasoning_effort ? model_parameters.reasoning_effort : 'none';
+  if (model_parameters.reasoning_effort) {
+    options.configOptions.reasoning_effort = agent.reasoning_effort ?? model_parameters.reasoning_effort;
+    options.llmConfig.reasoning = {
+      effort: model_parameters.reasoning_effort ?? agent.reasoning_effort,
+    };
+  } else if (model_parameters.thinking) {
+    options.configOptions.thinking = {
+      type: 'enabled',
+      budget_tokens: model_parameters.thinkingBudget ?? 2000,
+    };
   }
-
+  
   if (
     agent.endpoint === EModelEndpoint.azureOpenAI &&
     options.llmConfig?.azureOpenAIApiInstanceName == null
