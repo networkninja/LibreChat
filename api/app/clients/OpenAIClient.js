@@ -31,7 +31,6 @@ const {
   createContextHandlers,
 } = require('./prompts');
 const { configureReasoning } = require('~/server/services/Endpoints/anthropic/helpers');
-const { extractBaseURL, getModelMaxTokens, getModelMaxOutputTokens } = require('~/utils');
 const { createFetch, createStreamEventHandlers } = require('./generators');
 const { addSpaceIfNeeded, isEnabled, sleep } = require('~/server/utils');
 const Tokenizer = require('~/server/services/Tokenizer');
