@@ -1042,7 +1042,7 @@ export const agentsSchema = agentsBaseSchema
     greeting: obj.greeting ?? undefined,
     maxContextTokens: obj.maxContextTokens ?? undefined,
     reasoning_effort: obj.reasoning_effort ?? undefined,
-    thinking: obj.thinking ?? null,
+    thinking: obj.thinking ?? undefined,
   }))
   .catch(() => ({
     model: agentsSettings.model.default,
