@@ -392,10 +392,13 @@ export const agentsSettings = {
     default: true as const,
   },
   thinkingBudget: {
-    min: 1024 as const,
-    step: 100 as const,
-    max: 200000 as const,
-    default: 2000 as const,
+    min: -1 as const,
+    max: 32768 as const,
+    step: 1 as const,
+    /** `-1` = Dynamic Thinking, meaning the model will adjust
+     * the budget based on the complexity of the request.
+     */
+    default: -1 as const,
   },
   maxContextTokens: {
     default: undefined,
@@ -1017,6 +1020,7 @@ export const agentsBaseSchema = tConversationSchema.pick({
   greeting: true,
   maxContextTokens: true,
   reasoning_effort: true,
+  thinking: true,
 });
 
 export const agentsSchema = agentsBaseSchema
@@ -1038,6 +1042,7 @@ export const agentsSchema = agentsBaseSchema
     greeting: obj.greeting ?? undefined,
     maxContextTokens: obj.maxContextTokens ?? undefined,
     reasoning_effort: obj.reasoning_effort ?? undefined,
+    thinking: obj.thinking ?? null,
   }))
   .catch(() => ({
     model: agentsSettings.model.default,
@@ -1055,6 +1060,7 @@ export const agentsSchema = agentsBaseSchema
     greeting: undefined,
     maxContextTokens: undefined,
     reasoning_effort: undefined,
+    thinking: undefined,
   }));
 
 export const openAIBaseSchema = tConversationSchema.pick({

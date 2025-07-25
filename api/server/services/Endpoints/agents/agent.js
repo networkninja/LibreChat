@@ -121,6 +121,17 @@ const initializeAgent = async ({
     overrideModel: agent.model,
     endpointOption: _endpointOption,
   });
+    if (model_parameters.reasoning_effort) {
+    options.configOptions.reasoning_effort = agent.reasoning_effort ?? model_parameters.reasoning_effort;
+    options.llmConfig.reasoning = {
+      effort: model_parameters.reasoning_effort ?? agent.reasoning_effort,
+    };
+  } else if (model_parameters.thinking) {
+    options.configOptions.thinking = {
+      type: 'enabled',
+      budget_tokens: model_parameters.thinkingBudget ?? 2000,
+    };
+  }
 
   const tokensModel =
     agent.provider === EModelEndpoint.azureOpenAI ? agent.model : modelOptions.model;
