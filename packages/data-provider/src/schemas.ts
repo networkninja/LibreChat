@@ -644,15 +644,8 @@ export const tConversationSchema = z.object({
   file_ids: z.array(z.string()).optional(),
   /* vision */
   imageDetail: eImageDetailSchema.optional(),
-  /* OpenAI: Reasoning models only */
-  reasoning_effort: eReasoningEffortSchema.optional().nullable(),
-  reasoning_summary: eReasoningSummarySchema.optional().nullable(),
-  /* OpenAI: use Responses API */
-  useResponsesApi: z.boolean().optional(),
-  /* OpenAI Responses API / Anthropic API / Google API */
-  web_search: z.boolean().optional(),
-  /* disable streaming */
-  disableStreaming: z.boolean().optional(),
+  /* OpenAI: o1 only or CUSTOM REASONING */
+  reasoning_effort: eReasoningEffortSchema.optional(),
   /* assistant */
   assistant_id: z.string().optional(),
   /* agents */
@@ -751,14 +744,6 @@ export const tQueryParamsSchema = tConversationSchema
     max_tokens: true,
     /** @endpoints openAI, custom, azureOpenAI */
     reasoning_effort: true,
-    /** @endpoints openAI, custom, azureOpenAI */
-    reasoning_summary: true,
-    /** @endpoints openAI, custom, azureOpenAI */
-    useResponsesApi: true,
-    /** @endpoints openAI, anthropic, google */
-    web_search: true,
-    /** @endpoints openAI, custom, azureOpenAI */
-    disableStreaming: true,
     /** @endpoints google, anthropic, bedrock */
     topP: true,
     /** @endpoints google, anthropic */
