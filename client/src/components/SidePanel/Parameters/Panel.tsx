@@ -14,6 +14,7 @@ import { useGetEndpointsQuery } from '~/data-provider';
 import { getEndpointField, logger } from '~/utils';
 import { componentMapping } from './components';
 import { useChatContext } from '~/Providers';
+import { thinkingModels } from '~/common';
 import keyBy from 'lodash/keyBy';
 
 export default function Parameters() {
@@ -39,6 +40,10 @@ export default function Parameters() {
 
   const parameters = useMemo((): SettingDefinition[] => {
     const customParams = endpointsConfig[provider]?.customParams ?? {};
+    //needed for thinking models for custom, not set up for allowing right parameters
+    if (endpointType === 'custom' && thinkingModels.includes(model) && provider) {
+      customParams.defaultParamsEndpoint = 'anthropic';
+    }
     const [combinedKey, endpointKey] = getSettingsKeys(endpointType ?? provider, model);
     const overriddenEndpointKey = customParams.defaultParamsEndpoint ?? endpointKey;
     const defaultParams = paramSettings[combinedKey] ?? paramSettings[overriddenEndpointKey] ?? [];

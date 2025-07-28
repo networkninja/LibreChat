@@ -32,6 +32,17 @@ export enum TTSEndpoints {
   external = 'external',
 }
 
+export const thinkingModels = [
+  'claude-3.7-sonnet',
+  'claude-3-7-sonnet-latest',
+  'claude-4-sonnet',
+  'claude-4-opus',
+  'anthropic-claude-3-7-sonnet',
+  'anthropic-claude-4-sonnet',
+  'anthropic-claude-4-opus',
+  'groq-deepseek-r1-distill-llama-70b',
+];
+
 export type AudioChunk = {
   audio: string;
   isFinal: boolean;

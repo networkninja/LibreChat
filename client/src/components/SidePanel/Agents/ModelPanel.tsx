@@ -16,7 +16,7 @@ import ControlCombobox from '~/components/ui/ControlCombobox';
 import { useGetEndpointsQuery } from '~/data-provider';
 import { getEndpointField, cn } from '~/utils';
 import { useLocalize } from '~/hooks';
-import { Panel } from '~/common';
+import { Panel, thinkingModels } from '~/common';
 
 export default function ModelPanel({
   providers,
@@ -74,8 +74,7 @@ export default function ModelPanel({
   const parameters = useMemo((): SettingDefinition[] => {
     const customParams = endpointsConfig[provider]?.customParams ?? {};
     //needed for thinking models for custom, not set up for allowing right parameters
-    if (endpointType === 'custom' && model?.includes('claude') && provider) {
-      console.log('here');
+    if (endpointType === 'custom' && model && thinkingModels.includes(model) && provider) {
       customParams.defaultParamsEndpoint = 'anthropic';
     }
     const [combinedKey, endpointKey] = getSettingsKeys(endpointType ?? provider, model ?? '');
