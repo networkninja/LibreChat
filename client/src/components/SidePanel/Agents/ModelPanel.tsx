@@ -89,7 +89,7 @@ export default function ModelPanel({
   }, [endpointType, endpointsConfig, model, provider]);
 
   const setOption = (optionKey: keyof t.AgentModelParameters) => (value: t.AgentParameterValue) => {
-    setValue(`model_parameters.${optionKey}`, value);
+    setValue(`model_parameters.${String(optionKey)}`, value);
   };
 
   const handleResetParameters = () => {
@@ -239,7 +239,12 @@ export default function ModelPanel({
                   defaultValue={defaultValue}
                   {...rest}
                   setOption={setOption as t.TSetOption}
-                  conversation={modelParameters as Partial<t.TConversation>}
+                  conversation={
+                    {
+                      ...modelParameters,
+                      thinking: modelParameters.thinking ? true : false, // Converts to true/false
+                    } as Partial<t.TConversation>
+                  }
                 />
               );
             })}

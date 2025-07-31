@@ -18,6 +18,18 @@ const { getAgent } = require('~/models/Agent');
 const { getFiles } = require('~/models/File');
 const { logger } = require('~/config');
 
+//use to list all the models, easy to update with new models
+const thinkingModels = [
+  'claude-3.7-sonnet',
+  'claude-3-7-sonnet-latest',
+  'claude-4-sonnet',
+  'claude-4-opus',
+  'anthropic-claude-3-7-sonnet',
+  'anthropic-claude-4-sonnet',
+  'anthropic-claude-4-opus',
+  'groq-deepseek-r1-distill-llama-70b',
+];
+
 const providerConfigMap = {
   [Providers.XAI]: initCustom,
   [Providers.OLLAMA]: initCustom,
@@ -317,6 +329,31 @@ const initializeClient = async ({ req, res, endpointOption }) => {
   delete endpointOption.agent;
   if (!primaryAgent) {
     throw new Error('Agent not found');
+  }
+
+  if (req.body?.reasoning_effort) {
+    console.log("reasoning_Effort agents")
+    endpointOption.model_parameters.reasoning_effort =
+      endpointOption.model_parameters?.reasoning_effort ?? req.body?.reasoning_effort;
+  } else if (req.body?.thinking) {
+    console.log("thinkin")
+    endpointOption.model_parameters.thinking = {
+      type: 'enabled',
+      budget_tokens: req.body?.thinkingBudget
+        ? endpointOption.model_parameters.thinkingBudget
+        : 2000,
+    };
+  } else if (thinkingModels.includes(req.body.model) && req.body.thinking != false) {
+    console.log("thinking model")
+    endpointOption.model_parameters.thinking = {
+      type: 'enabled',
+      budget_tokens: req.body?.thinkingBudget
+        ? endpointOption.model_parameters.thinkingBudget
+        : 2000,
+    };
+    endpointOption.model_parameters.reasoning = {
+      effort: req.body?.reasoning_effort ? endpointOption.model_parameters?.reasoning : 'medium',
+    }
   }
 
   const agentConfigs = new Map();

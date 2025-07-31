@@ -153,7 +153,7 @@ export type File = {
 
 /* Agent types */
 
-export type AgentParameterValue = number | string | null;
+export type AgentParameterValue = number | string | boolean | null;
 
 export type AgentModelParameters = {
   model?: string;

@@ -927,7 +927,11 @@ class BaseClient {
       endpointType: this.options.endpointType,
       ...endpointOptions,
     };
-
+    
+    if(fieldsToKeep.thinking){
+      fieldsToKeep.thinking = fieldsToKeep.thinking.type == 'enabled' ? true : false;
+    }
+    
     const existingConvo =
       this.fetchedConvo === true
         ? null

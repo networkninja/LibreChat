@@ -175,6 +175,17 @@ export default function useChatFunctions({
       conversation: conversation ?? {},
     });
 
+    //needed to explicitly call them, does not set automatically
+    if(conversation?.maxOutputTokens){
+      convo.maxOutputTokens = conversation?.maxOutputTokens;
+    }
+    if(conversation?.thinking || conversation?.thinking == false){
+      convo.thinking = conversation?.thinking;
+    }
+    if(conversation?.thinkingBudget){
+      convo.thinkingBudget = conversation?.thinkingBudget;
+    }
+
     const { modelDisplayLabel } = endpointsConfig?.[endpoint ?? ''] ?? {};
     const endpointOption = Object.assign(
       {

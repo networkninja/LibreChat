@@ -113,10 +113,12 @@ function extractAdditionalKwargs(data) {
   if (result.additional_kwargs) {
     // Extract reasoning_content from the nested structure
     let reasoningContent = null;
-    if (result.additional_kwargs.__raw_response && 
-        result.additional_kwargs.__raw_response.choices && 
-        result.additional_kwargs.__raw_response.choices[0] && 
-        result.additional_kwargs.__raw_response.choices[0].delta) {
+    if (
+      result.additional_kwargs.__raw_response &&
+      result.additional_kwargs.__raw_response.choices &&
+      result.additional_kwargs.__raw_response.choices[0] &&
+      result.additional_kwargs.__raw_response.choices[0].delta
+    ) {
       reasoningContent = result.additional_kwargs.__raw_response.choices[0].delta.reasoning_content;
     }
     
@@ -142,8 +144,8 @@ function extractAdditionalKwargs(data) {
     }
     
     // Set additional_kwargs to only contain reasoning_content
-    result.additional_kwargs = { 
-      reasoning_content: reasoningContent 
+    result.additional_kwargs = {
+      reasoning_content: reasoningContent,
     };
   }
   
@@ -874,7 +876,10 @@ class AgentClient extends BaseClient {
                 //     data: JSON.stringify(data.chunk.lc_kwargs),
                 // });
 
-                if(data.chunk?.lc_kwargs?.additional_kwargs?.__raw_response?.choices?.[0]?.delta?.reasoning_content){
+                if (
+                  data.chunk?.lc_kwargs?.additional_kwargs?.__raw_response?.choices?.[0]?.delta
+                    ?.reasoning_content
+                ) {
                   data.chunk = extractAdditionalKwargs(data);
                 }
                 if (this.options.eventHandlers[GraphEvents.CHAT_MODEL_STREAM]) {
@@ -931,7 +936,13 @@ class AgentClient extends BaseClient {
             err,
           );
         }
-
+        //needs to be manually set for reasoning to work, not set automatically
+        if (run.Graph.boundModel.reasoning_effort && !run.Graph.boundModel.reasoningEffort) {
+          run.Graph.boundModel.reasoningEffort = run.Graph.boundModel.reasoning_effort;
+          run.Graph.boundModel.reasoning = {
+            effort: run.Graph.boundModel.reasoning_effort,
+          }
+         }
         await run.processStream({ messages }, config, {
           keepContent: i !== 0,
           tokenCounter: createTokenCounter(this.getEncoding()),
