@@ -74,7 +74,7 @@ export default function ModelPanel({
   const parameters = useMemo((): SettingDefinition[] => {
     const customParams = endpointsConfig[provider]?.customParams ?? {};
     //needed for thinking models for custom, not set up for allowing right parameters
-    if (endpointType === 'custom' && model && thinkingModels.includes(model) && provider) {
+    if (endpointType === 'custom' && model.includes('claude') && provider) {
       customParams.defaultParamsEndpoint = 'anthropic';
     }
     const [combinedKey, endpointKey] = getSettingsKeys(endpointType ?? provider, model ?? '');
