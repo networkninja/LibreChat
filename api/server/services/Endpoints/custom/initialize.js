@@ -14,6 +14,18 @@ const OpenAIClient = require('~/app/clients/OpenAIClient');
 const { isUserProvided } = require('~/server/utils');
 const getLogStores = require('~/cache/getLogStores');
 
+//use to list all the models, easy to update with new models
+const thinkingModels = [
+  'claude-3.7-sonnet',
+  'claude-3-7-sonnet-latest',
+  'claude-4-sonnet',
+  'claude-4-opus',
+  'anthropic-claude-3-7-sonnet',
+  'anthropic-claude-4-sonnet',
+  'anthropic-claude-4-opus',
+  'groq-deepseek-r1-distill-llama-70b',
+];
+
 const { PROXY } = process.env;
 
 const initializeClient = async ({ req, res, endpointOption, optionsOnly, overrideEndpoint }) => {
@@ -94,6 +106,62 @@ const initializeClient = async ({ req, res, endpointOption, optionsOnly, overrid
     await fetchModels({ apiKey, baseURL, name: endpoint, user: req.user.id, tokenKey });
     endpointTokenConfig = await cache.get(tokenKey);
   }
+
+  if (!endpointConfig.addParams) {
+    endpointConfig.addParams = {};
+  }
+
+  if (endpointOption.model_parameters?.reasoning_effort) {
+    // console.log("reasoning_Effort custom")
+    endpointConfig.addParams.reasoning_effort =
+      endpointOption.model_parameters?.reasoning_effort ?? endpointConfig?.reasoning_effort;
+    endpointConfig.addParams.thinking = {
+      type: 'enabled',
+      budget_tokens: endpointOption.model_parameters?.thinkingBudget ?? 2000,
+    };
+    delete endpointOption.model_parameters.temperature;
+  } else if (endpointOption.model_parameters?.thinking) {
+    // console.log("thinking set", endpointOption.model_parameters?.thinking)
+    endpointConfig.addParams.thinking = {
+      type: endpointOption.model_parameters?.thinking ? 'enabled' : 'disabled',
+      budget_tokens: endpointOption.model_parameters?.thinkingBudget ?? 2000,
+    };
+    // if(endpointOption.model_parameters?.thinking){
+      endpointConfig.addParams.reasoning = {
+        effort: endpointOption.model_parameters?.reasoning_effort
+          ? endpointConfig?.reasoning
+          : 'medium',
+      };
+    //}
+    delete endpointOption.model_parameters.temperature;
+  } else if (
+    thinkingModels.includes(req.body.model) &&
+    endpointOption.model_parameters?.thinking != false &&
+    req.body?.thinking != false
+  ) {
+    // console.log("thinking model", req.body)
+    endpointConfig.addParams.thinking = {
+      type: 'enabled',
+      budget_tokens: endpointOption.model_parameters?.thinkingBudget ?? 2000,
+    };
+    endpointConfig.addParams.reasoning = {
+      effort: endpointOption.model_parameters?.reasoning_effort
+        ? endpointConfig?.reasoning
+        : 'medium',
+    };
+    delete endpointOption.model_parameters.temperature;
+  }
+  endpointConfig.addParams.reasoning = {
+    effort: endpointOption.model_parameters?.reasoning_effort
+      ? endpointConfig?.reasoning
+      : 'medium',
+  };
+
+  // console.log(
+  //   'endpointOption.model_parameters.model',
+  //   endpointOption.model_parameters.model,
+  //   req.body,
+  // );
 
   const customOptions = {
     headers: resolvedHeaders,

@@ -74,7 +74,8 @@ export default function ModelPanel({
   const parameters = useMemo((): SettingDefinition[] => {
     const customParams = endpointsConfig[provider]?.customParams ?? {};
     //needed for thinking models for custom, not set up for allowing right parameters
-    if (endpointType === 'custom' && model.includes('claude') && provider) {
+    console.log("model", model, provider);
+    if (endpointType === 'custom' && model && model.includes('claude')) {
       customParams.defaultParamsEndpoint = 'anthropic';
     }
     const [combinedKey, endpointKey] = getSettingsKeys(endpointType ?? provider, model ?? '');
@@ -89,7 +90,7 @@ export default function ModelPanel({
   }, [endpointType, endpointsConfig, model, provider]);
 
   const setOption = (optionKey: keyof t.AgentModelParameters) => (value: t.AgentParameterValue) => {
-    setValue(`model_parameters.${String(optionKey)}`, value);
+    setValue(`model_parameters.${optionKey}`, value);
   };
 
   const handleResetParameters = () => {

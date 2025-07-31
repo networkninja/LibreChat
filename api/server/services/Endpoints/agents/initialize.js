@@ -331,31 +331,6 @@ const initializeClient = async ({ req, res, endpointOption }) => {
     throw new Error('Agent not found');
   }
 
-  if (req.body?.reasoning_effort) {
-    console.log("reasoning_Effort agents")
-    endpointOption.model_parameters.reasoning_effort =
-      endpointOption.model_parameters?.reasoning_effort ?? req.body?.reasoning_effort;
-  } else if (req.body?.thinking) {
-    console.log("thinkin")
-    endpointOption.model_parameters.thinking = {
-      type: 'enabled',
-      budget_tokens: req.body?.thinkingBudget
-        ? endpointOption.model_parameters.thinkingBudget
-        : 2000,
-    };
-  } else if (thinkingModels.includes(req.body.model) && req.body.thinking != false) {
-    console.log("thinking model")
-    endpointOption.model_parameters.thinking = {
-      type: 'enabled',
-      budget_tokens: req.body?.thinkingBudget
-        ? endpointOption.model_parameters.thinkingBudget
-        : 2000,
-    };
-    endpointOption.model_parameters.reasoning = {
-      effort: req.body?.reasoning_effort ? endpointOption.model_parameters?.reasoning : 'medium',
-    }
-  }
-
   const agentConfigs = new Map();
   /** @type {Set<string>} */
   const allowedProviders = new Set(req?.app?.locals?.[EModelEndpoint.agents]?.allowedProviders);
@@ -399,15 +374,39 @@ const initializeClient = async ({ req, res, endpointOption }) => {
     }
   }
 
-  if (!modelOptions.addParams){
-    modelOptions.addParams = {};
+  // if (!modelOptions.addParams){
+  //   modelOptions.addParams = {};
+  // }
+
+  if (req.body?.reasoning_effort) {
+    console.log("reasoning_Effort agents")
+    endpointOption.model_parameters.reasoning_effort =
+      endpointOption.model_parameters?.reasoning_effort ?? req.body?.reasoning_effort;
+  } else if (req.body?.thinking) {
+    console.log("thinkin")
+    endpointOption.model_parameters.thinking = {
+      type: 'enabled',
+      budget_tokens: req.body?.thinkingBudget
+        ? endpointOption.model_parameters.thinkingBudget
+        : 2000,
+    };
+    endpointOption.model_parameters.reasoning = {
+      effort: endpointOption.model_parameters?.reasoning_effort
+        ? endpointConfig?.reasoning
+        : 'medium',
+    };
+  } else if (thinkingModels.includes(req.body.model) && req.body.thinking != false) {
+    console.log("thinking model")
+    endpointOption.model_parameters.thinking = {
+      type: 'enabled',
+      budget_tokens: req.body?.thinkingBudget
+        ? endpointOption.model_parameters.thinkingBudget
+        : 2000,
+    };
+    endpointOption.model_parameters.reasoning = {
+      effort: req.body?.reasoning_effort ? endpointOption.model_parameters?.reasoning : 'medium',
+    }
   }
-
-  modelOptions.addParams.reasoning_effort =
-    modelOptions.reasoning_effort ?? modelOptions.reasoning_effort;
-
-  modelOptions.addParams.reasoning = {
-    effort: modelOptions.reasoning_effort ? modelOptions.reasoning : 'medium',
   }
 
   const sender =

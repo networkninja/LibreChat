@@ -41,7 +41,7 @@ export default function Parameters() {
   const parameters = useMemo((): SettingDefinition[] => {
     const customParams = endpointsConfig[provider]?.customParams ?? {};
     //needed for thinking models for custom, not set up for allowing right parameters
-    if (endpointType === 'custom' && model.includes('claude') && provider) {
+    if (endpointType === 'custom' && model.includes('claude')) {
       customParams.defaultParamsEndpoint = 'anthropic';
     }
     const [combinedKey, endpointKey] = getSettingsKeys(endpointType ?? provider, model);
