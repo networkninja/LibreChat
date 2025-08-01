@@ -1101,6 +1101,7 @@ export const openAIBaseSchema = tConversationSchema.pick({
   useResponsesApi: true,
   web_search: true,
   disableStreaming: true,
+  thinking: true,
 });
 
 export const openAISchema = openAIBaseSchema
