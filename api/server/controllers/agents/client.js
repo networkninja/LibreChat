@@ -952,7 +952,11 @@ class AgentClient extends BaseClient {
               : 2000,
           }
           delete run.Graph.boundModel.temperature;
-        } else if (run.Graph.boundModel.reasoning_effort || run.Graph.boundModel.reasoning || un.Graph.clientOptions.reasoning_effort) {
+        } else if (
+          run.Graph.boundModel.reasoning_effort ||
+          run.Graph.boundModel.reasoning ||
+          run.Graph.clientOptions.reasoning_effort
+        ) {
           console.log("run reasoning");
           run.Graph.boundModel.modelKwargs.thinking = {
             type: 'enabled',
