@@ -942,6 +942,10 @@ class AgentClient extends BaseClient {
           );
         }
         //needs to be manually set for thinking to work with OpenAI langchain with claude.
+        //if undefined means MCP server being used
+        if (run.Graph.boundModel.modelKwargs == undefined) {
+          run.Graph.boundModel.modelKwargs = {};
+        }
         //  console.log("run 2", run.Graph.clientOptions, run.Graph.boundModel);
         if (run.Graph.boundModel.thinking || run.Graph.clientOptions.thinking) {
            console.log("thinking");
@@ -950,7 +954,7 @@ class AgentClient extends BaseClient {
             budget_tokens: run.Graph.boundModels?.thinkingBudget
               ? run.Graph.clientOptions.thinkingBudget
               : 2000,
-          }
+          };
           delete run.Graph.boundModel.temperature;
         } else if (
           run.Graph.boundModel.reasoning_effort ||
@@ -963,10 +967,16 @@ class AgentClient extends BaseClient {
             budget_tokens: run.Graph.boundModels?.thinkingBudget
               ? run.Graph.clientOptions.thinkingBudget
               : 2000,
-          }
+          };
           delete run.Graph.boundModel.temperature;
         }
-        console.log("run 2", run.Graph.boundModel);
+
+        //for mcp servers
+        if (run.Graph.boundModel.modelKwarg?.bound && run.Graph.boundModel.modelKwargs.thinking) {
+          run.Graph.boundModel.bound.modelKwargs.thinking =
+            run.Graph.boundModel.modelKwargs.thinking;
+        }
+
         await run.processStream({ messages }, config, {
           keepContent: i !== 0,
           tokenCounter: createTokenCounter(this.getEncoding()),
