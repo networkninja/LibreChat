@@ -941,40 +941,42 @@ class AgentClient extends BaseClient {
             err,
           );
         }
-        //needs to be manually set for thinking to work with OpenAI langchain with claude.
+        //needs to be manually set for thinking to work with OpenAI langchain with claude. only needs for provider == 'openAI
         //if undefined means MCP server being used
-        if (run.Graph.boundModel.modelKwargs == undefined) {
-          run.Graph.boundModel.modelKwargs = {};
-        }
-        //  console.log("run 2", run.Graph.clientOptions, run.Graph.boundModel);
-        if (run.Graph.boundModel.thinking || run.Graph.clientOptions.thinking) {
-           console.log("thinking");
-          run.Graph.boundModel.modelKwargs.thinking = {
-            type: 'enabled',
-            budget_tokens: run.Graph.boundModels?.thinkingBudget
-              ? run.Graph.clientOptions.thinkingBudget
-              : 2000,
-          };
-          delete run.Graph.boundModel.temperature;
-        } else if (
-          run.Graph.boundModel.reasoning_effort ||
-          run.Graph.boundModel.reasoning ||
-          run.Graph.clientOptions.reasoning_effort
-        ) {
-          console.log("run reasoning");
-          run.Graph.boundModel.modelKwargs.thinking = {
-            type: 'enabled',
-            budget_tokens: run.Graph.boundModels?.thinkingBudget
-              ? run.Graph.clientOptions.thinkingBudget
-              : 2000,
-          };
-          delete run.Graph.boundModel.temperature;
-        }
+        if (run.Graph.provider == 'openAI') {
+          if (run.Graph.boundModel.modelKwargs == undefined) {
+            run.Graph.boundModel.modelKwargs = {};
+          }
+          //  console.log("run 2", run.Graph.clientOptions, run.Graph.boundModel);
+          if (run.Graph.boundModel.thinking || run.Graph.clientOptions.thinking) {
+            console.log("thinking");
+            run.Graph.boundModel.modelKwargs.thinking = {
+              type: 'enabled',
+              budget_tokens: run.Graph.boundModels?.thinkingBudget
+                ? run.Graph.clientOptions.thinkingBudget
+                : 2000,
+            };
+            delete run.Graph.boundModel.temperature;
+          } else if (
+            run.Graph.boundModel.reasoning_effort ||
+            run.Graph.boundModel.reasoning ||
+            run.Graph.clientOptions.reasoning_effort
+          ) {
+            console.log("run reasoning");
+            run.Graph.boundModel.modelKwargs.thinking = {
+              type: 'enabled',
+              budget_tokens: run.Graph.boundModels?.thinkingBudget
+                ? run.Graph.clientOptions.thinkingBudget
+                : 2000,
+            };
+            delete run.Graph.boundModel.temperature;
+          }
 
-        //for mcp servers
-        if (run.Graph.boundModel.modelKwarg?.bound && run.Graph.boundModel.modelKwargs.thinking) {
-          run.Graph.boundModel.bound.modelKwargs.thinking =
-            run.Graph.boundModel.modelKwargs.thinking;
+          //for mcp servers
+          if (run.Graph.boundModel.modelKwarg?.bound && run.Graph.boundModel.modelKwargs.thinking) {
+            run.Graph.boundModel.bound.modelKwargs.thinking =
+              run.Graph.boundModel.modelKwargs.thinking;
+          }
         }
 
         await run.processStream({ messages }, config, {
