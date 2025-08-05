@@ -973,7 +973,11 @@ class AgentClient extends BaseClient {
           }
 
           //for mcp servers
-          if (run.Graph.boundModel.modelKwarg?.bound && run.Graph.boundModel.modelKwargs.thinking) {
+          if (
+            run.Graph.boundModel.bound?.modelKwargs &&
+            run.Graph.boundModel.modelKwargs.thinking
+          ) {
+            // console.log("lc_kwargs mcp")
             run.Graph.boundModel.bound.modelKwargs.thinking =
               run.Graph.boundModel.modelKwargs.thinking;
           }
