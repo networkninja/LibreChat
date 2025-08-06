@@ -941,9 +941,12 @@ class AgentClient extends BaseClient {
             err,
           );
         }
-        //needs to be manually set for thinking to work with OpenAI langchain with claude. only needs for provider == 'openAI
+        //needs to be manually set for thinking to work with OpenAI langchain with claude. only needs for provider == 'openAI and NOT GROQ
         //if undefined means MCP server being used
-        if (run.Graph.provider == 'openAI') {
+        if (
+          run.Graph.provider == 'openAI' &&
+          run.Graph.clientOptions.configuration.baseURL != 'https://api.groq.com/openai/v1/'
+        ) {
           if (run.Graph.boundModel.modelKwargs == undefined) {
             run.Graph.boundModel.modelKwargs = {};
           }
