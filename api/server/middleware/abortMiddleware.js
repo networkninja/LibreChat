@@ -1,6 +1,8 @@
 const { logger } = require('@librechat/data-schemas');
 const { countTokens, isEnabled, sendEvent } = require('@librechat/api');
 const { isAssistantsEndpoint, ErrorTypes } = require('librechat-data-provider');
+
+const { formatAbortError } = require('~/server/utils/routeErrorHandlers');
 const { truncateText, smartTruncateText } = require('~/app/clients/prompts');
 const clearPendingReq = require('~/cache/clearPendingReq');
 const { sendError } = require('~/server/middleware/error');
@@ -302,6 +304,10 @@ const createAbortController = (req, res, getAbortData, getReqData) => {
  * @returns { Promise<void> }
  */
 const handleAbortError = async (res, req, error, data) => {
+
+  const classifiedError = formatAbortError(error, req, data);
+
+
   if (error?.message?.includes('base64')) {
     logger.error('[handleAbortError] Error in base64 encoding', {
       ...error,
@@ -319,10 +325,11 @@ const handleAbortError = async (res, req, error, data) => {
     );
   }
 
-  let errorText = error?.message?.includes('"type"')
-    ? error.message
-    : 'An error occurred while processing your request. Please contact the Admin.';
+  // Use the classified error message
+  let errorText = JSON.stringify(classifiedError);
 
+
+  // Keep existing special case handling
   if (error?.type === ErrorTypes.INVALID_REQUEST) {
     errorText = `{"type":"${ErrorTypes.INVALID_REQUEST}"}`;
   }
@@ -330,6 +337,9 @@ const handleAbortError = async (res, req, error, data) => {
   if (error?.message?.includes("does not support 'system'")) {
     errorText = `{"type":"${ErrorTypes.NO_SYSTEM_MESSAGES}"}`;
   }
+
+  // Add debug info to console
+  console.log('📝 User will see error message:', errorText);
 
   /**
    * @param {string} partialText
@@ -364,7 +374,6 @@ const handleAbortError = async (res, req, error, data) => {
       };
     }
 
-    // Create a simple callback without capturing parent scope
     const callback = async () => {
       try {
         cleanupAbortController(conversationId);
