@@ -27,17 +27,8 @@ const buildFunction = {
   [EModelEndpoint.assistants]: assistants.buildOptions,
   [EModelEndpoint.azureAssistants]: azureAssistants.buildOptions,
 };
-
-const thinkingModels = [
-  'claude-3.7-sonnet',
-  'claude-3-7-sonnet-latest',
-  'claude-4-sonnet',
-  'claude-4-opus',
-  'anthropic-claude-3-7-sonnet',
-  'anthropic-claude-4-sonnet',
-  'anthropic-claude-4-opus',
-  'groq-deepseek-r1-distill-llama-70b',
-];
+const thinkingModelsRegex =
+  /^(anthropic-)?claude-[34]([.-]7)?-(sonnet|opus)(-latest)?$|^groq-deepseek-r1-distill-llama-70b$/;
 
 async function buildEndpointOption(req, res, next) {
   const { endpoint, endpointType } = req.body;
@@ -95,19 +86,15 @@ async function buildEndpointOption(req, res, next) {
     // TODO: use object params
     req.body.endpointOption = await builder(endpoint, parsedBody, endpointType);
 
-    // needed for reasoning to work with claude models
-    if (thinkingModels.includes(req.body.model) && req.body?.reasoning_effort) {
-      //console.log("reasoning_Effort agents")
+    if (thinkingModelsRegex.test(req.body.model) && req.body?.reasoning_effort) {
       req.body.endpointOption.model_parameters.reasoning_effort =
         req.body.endpointOption.model_parameters.reasoning_effort ?? req.body.reasoning_effort;
-    } else if (req.body.thinking == false ) {
-      //needed to remove if thinking = false
+    } else if (req.body.thinking == false) {
       console.log("thinkikng false");
     } else if (
-      thinkingModels.includes(req.body.model) &&
+      thinkingModelsRegex.test(req.body.model) &&
       (req.body?.thinking != false || !req.body.thinking)
     ) {
-      //console.log("thinkin")
       req.body.endpointOption.model_parameters.thinking = {
         type: 'enabled',
         budget_tokens: req.body.thinkingBudget

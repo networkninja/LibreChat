@@ -46,16 +46,9 @@ const { tokenSplit } = require('./document');
 const BaseClient = require('./BaseClient');
 const { logger } = require('~/config');
 //use to list all the models, easy to update with new models
-const thinkingModels = [
-  'claude-3.7-sonnet',
-  'claude-3-7-sonnet-latest',
-  'claude-4-sonnet',
-  'claude-4-opus',
-  'anthropic-claude-3-7-sonnet',
-  'anthropic-claude-4-sonnet',
-  'anthropic-claude-4-opus',
-  'groq-deepseek-r1-distill-llama-70b',
-];
+const thinkingModelsRegex =
+  /^(anthropic-)?claude-[34]([.-]7)?-(sonnet|opus)(-latest)?$|^groq-deepseek-r1-distill-llama-70b$/;
+const openAIThinkingModels = ['o1', 'o3', 'o3-mini'];
 
 class OpenAIClient extends BaseClient {
   constructor(apiKey, options = {}) {
@@ -1144,24 +1137,10 @@ ${convo}
 
       // used for LiteLLm to add reasoning, does not display otherwise, have to add the values to allow thinking to show and be enabled
       // Different values for OpenAI and other models, thinking budget set to max unless max_tokens is lower
-      if (thinkingModels.includes(modelOptions.model)) {
-        let thinkingBudget = 128000;
-        if (!modelOptions.max_tokens) [(modelOptions.max_tokens = 64000)];
-        // thinking budget has to be less than max_tokens, make sure its defined correctly
-        if (modelOptions.max_tokens < 128000 && modelOptions.max_tokens > 7000) {
-          thinkingBudget = modelOptions.max_tokens - 5000;
-        } else if (modelOptions.max_tokens < 7000) {
-          thinkingBudget = modelOptions.max_tokens - 1000;
-        }
-        //opus has lower max_token rate, make sure not over the full max_token rate
-        if (modelOptions.model.includes('opus')) {
-          if (modelOptions.max_tokens > 32700) {
-            modelOptions.max_tokens = 32700;
-          }
-          if (modelOptions.max_tokens > 12000) {
-            thinkingBudget = 10000;
-          }
-        }
+      if (thinkingModelsRegex.test(modelOptions.model) && modelOptions.thinking) {
+        logger.debug('thinking models');
+        let thinkingBudget = modelOptions.thinkingBudget ?? 2000;
+        modelOptions.max_tokens = modelOptions.max_tokens ?? 8192;
 
         modelOptions = configureReasoning(modelOptions, {
           thinking: true,

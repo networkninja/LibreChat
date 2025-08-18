@@ -182,6 +182,26 @@ const AgentController = async (req, res, next, initializeClient, addTitle) => {
     };
 
     let response = await client.sendMessage(text, messageOptions);
+    //removed error as there is no way to add thinking without updating mode modules
+    let contentParse = JSON.parse(JSON.stringify(response.content));
+    let toolEnabled = false;
+    let removeError = false;
+    for (const content of contentParse) {
+      if (content.type === 'tool_call') {
+        toolEnabled = true;
+      }
+      if (content.type == 'error') {
+        if (content.error.includes('Expected `thinking` or `redacted_thinking') && toolEnabled) {
+          console.log('Error thinking content', content);
+          removeError = true;
+        }
+      }
+    }
+    //removes error that is not necessary for posting content
+    if (removeError) {
+      contentParse = contentParse.filter((content) => content.type !== 'error');
+    }
+    response.content = contentParse;
 
     // Extract what we need and immediately break reference
     const messageId = response.messageId;

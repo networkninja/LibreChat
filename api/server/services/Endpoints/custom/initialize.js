@@ -15,16 +15,8 @@ const { isUserProvided } = require('~/server/utils');
 const getLogStores = require('~/cache/getLogStores');
 
 //use to list all the models, easy to update with new models
-const thinkingModels = [
-  'claude-3.7-sonnet',
-  'claude-3-7-sonnet-latest',
-  'claude-4-sonnet',
-  'claude-4-opus',
-  'anthropic-claude-3-7-sonnet',
-  'anthropic-claude-4-sonnet',
-  'anthropic-claude-4-opus',
-  'groq-deepseek-r1-distill-llama-70b',
-];
+const thinkingModelsRegex =
+  /^(anthropic-)?claude-[34]([.-]7)?-(sonnet|opus)(-latest)?$|^groq-deepseek-r1-distill-llama-70b$/;
 
 const { PROXY } = process.env;
 
@@ -112,10 +104,9 @@ const initializeClient = async ({ req, res, endpointOption, optionsOnly, overrid
   }
 
   if (
-    thinkingModels.includes(req.body.model) &&
+    thinkingModelsRegex.test(req.body.model) &&
     endpointOption.model_parameters?.reasoning_effort
   ) {
-    // console.log("reasoning_Effort custom")
     endpointConfig.addParams.reasoning_effort =
       endpointOption.model_parameters.reasoning_effort ?? endpointConfig.reasoning_effort;
     endpointConfig.addParams.thinking = {
@@ -128,8 +119,11 @@ const initializeClient = async ({ req, res, endpointOption, optionsOnly, overrid
         : 'medium',
     };
     delete endpointOption.model_parameters.temperature;
-  } else if (thinkingModels.includes(req.body.model) && endpointOption.model_parameters?.thinking) {
-    // console.log("thinking set", endpointOption.model_parameters?.thinking)
+  } else if (
+    thinkingModelsRegex.test(req.body.model) &&
+    endpointOption.model_parameters?.thinking
+  ) {
+    //console.log("thinking set", endpointOption.model_parameters?.thinking)
     endpointConfig.addParams.thinking = {
       type: endpointOption.model_parameters.thinking ? 'enabled' : 'disabled',
       budget_tokens: endpointOption.model_parameters.thinkingBudget ?? 2000,
