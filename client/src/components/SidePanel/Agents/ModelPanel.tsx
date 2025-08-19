@@ -16,7 +16,7 @@ import ControlCombobox from '~/components/ui/ControlCombobox';
 import { useGetEndpointsQuery } from '~/data-provider';
 import { getEndpointField, cn } from '~/utils';
 import { useLocalize } from '~/hooks';
-import { Panel, thinkingModels } from '~/common';
+import { Panel } from '~/common';
 
 export default function ModelPanel({
   providers,
@@ -240,12 +240,7 @@ export default function ModelPanel({
                   defaultValue={defaultValue}
                   {...rest}
                   setOption={setOption as t.TSetOption}
-                  conversation={
-                    {
-                      ...modelParameters,
-                      thinking: modelParameters.thinking ? true : false, // Converts to true/false
-                    } as Partial<t.TConversation>
-                  }
+                conversation={{ ...(modelParameters as unknown as Partial<t.TConversation>) }}
                 />
               );
             })}
