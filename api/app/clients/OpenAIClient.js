@@ -46,8 +46,8 @@ const { tokenSplit } = require('./document');
 const BaseClient = require('./BaseClient');
 const { logger } = require('~/config');
 //use to list all the models, easy to update with new models
-const thinkingModelsRegex =
-  /^(anthropic-)?claude-[34]([.-]7)?-(sonnet|opus)(-latest)?$|^groq-deepseek-r1-distill-llama-70b$/;
+const thinkingModelsRegex = 
+  /^(anthropic-)?claude-([34]([.-]7)?-(sonnet|opus)(-latest)?|sonnet-4-\d{8})$|^groq-deepseek-r1-distill-llama-70b$/;
 const openAIThinkingModels = ['o1', 'o3', 'o3-mini'];
 
 class OpenAIClient extends BaseClient {

@@ -15,8 +15,8 @@ const { isUserProvided } = require('~/server/utils');
 const getLogStores = require('~/cache/getLogStores');
 
 //use to list all the models, easy to update with new models
-const thinkingModelsRegex =
-  /^(anthropic-)?claude-[34]([.-]7)?-(sonnet|opus)(-latest)?$|^groq-deepseek-r1-distill-llama-70b$/;
+const thinkingModelsRegex = 
+  /^(anthropic-)?claude-([34]([.-]7)?-(sonnet|opus)(-latest)?|sonnet-4-\d{8})$|^groq-deepseek-r1-distill-llama-70b$/;
 
 const { PROXY } = process.env;
 
