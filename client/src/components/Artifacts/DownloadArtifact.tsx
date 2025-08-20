@@ -5,6 +5,7 @@ import { CheckMark } from '@librechat/client';
 import useArtifactProps from '~/hooks/Artifacts/useArtifactProps';
 import { useEditorContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
+import { convertToHTML } from './ArtifactHtmlConvertor';
 
 const DownloadArtifact = ({
   artifact,
@@ -18,17 +19,48 @@ const DownloadArtifact = ({
   const [isDownloaded, setIsDownloaded] = useState(false);
   const { fileKey: fileName } = useArtifactProps({ artifact });
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     try {
       const content = currentCode ?? artifact.content ?? '';
       if (!content) {
         return;
       }
-      const blob = new Blob([content], { type: 'text/plain' });
+
+      // Convert to HTML if it's a React component
+      let outputContent = content;
+      let mimeType = 'text/plain';
+      let downloadFileName = fileName;
+
+      const artifactMimeType = artifact.type;
+      console.log('artifactMimeType', artifactMimeType);
+      if (
+        (fileName.endsWith('.tsx') || fileName.endsWith('.jsx')) &&
+        artifactMimeType === 'application/vnd.react'
+      ) {
+        try {
+          // Call the updated makeValidHtml function
+          const result = await convertToHTML(content, fileName);
+
+          if (result.success) {
+            outputContent = result.html;
+            mimeType = 'text/html';
+            // Use the formatted filename from the result, or fallback to original
+            downloadFileName = (result.fileName || fileName).replace(/\.[jt]sx?$/, '') + '.html';
+          } else {
+            console.warn('HTML conversion failed, downloading original content');
+            // Fallback to original content if conversion fails
+          }
+        } catch (htmlError) {
+          console.error('HTML conversion error:', htmlError);
+          // Fallback to original content if conversion fails
+        }
+      }
+
+      const blob = new Blob([outputContent], { type: mimeType });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = fileName;
+      link.download = downloadFileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
