@@ -285,6 +285,8 @@ export const getResponseSender = (endpointOption: t.TEndpointOption): string => 
       return gptVersion || 'GPT';
     } else if (modelDisplayLabel) {
       return modelDisplayLabel;
+    } else if (model && model.includes('claude')) {
+      return model;
     }
 
     return 'AI';
