@@ -136,6 +136,12 @@ const initializeClient = async ({ req, res, endpointOption, optionsOnly, overrid
     delete endpointOption.model_parameters.temperature;
   }
 
+  //fixing bug with title
+  if (!thinkingModelsRegex.test(endpointOption.model_parameters.model)) {
+    console.log("not thinking model")
+    endpointConfig.addParams = [];
+  }
+
   const customOptions = {
     headers: resolvedHeaders,
     addParams: endpointConfig.addParams,

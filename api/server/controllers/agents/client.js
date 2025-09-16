@@ -832,7 +832,7 @@ class AgentClient extends BaseClient {
 
         if (noSystemMessages === true && systemContent?.length) {
           const latestMessageContent = _messages.pop().content;
-          if (typeof latestMessage !== 'string') {
+          if (typeof latestMessageContent !== 'string') {
             latestMessageContent[0].text = [systemContent, latestMessageContent[0].text].join('\n');
             _messages.push(new HumanMessage({ content: latestMessageContent }));
           } else {
@@ -951,28 +951,31 @@ class AgentClient extends BaseClient {
             run.Graph.boundModel.modelKwargs = {};
           }
           //  console.log("run 2", run.Graph.clientOptions, run.Graph.boundModel);
-          if (run.Graph.boundModel.thinking || run.Graph.clientOptions.thinking) {
-            console.log("thinking");
-            run.Graph.boundModel.modelKwargs.thinking = {
-              type: 'enabled',
-              budget_tokens: run.Graph.boundModels?.thinkingBudget
-                ? run.Graph.clientOptions.thinkingBudget
-                : 2000,
-            };
-            delete run.Graph.boundModel.temperature;
-          } else if (
-            run.Graph.boundModel.reasoning_effort ||
-            run.Graph.boundModel.reasoning ||
-            run.Graph.clientOptions.reasoning_effort
-          ) {
-            console.log("run reasoning");
-            run.Graph.boundModel.modelKwargs.thinking = {
-              type: 'enabled',
-              budget_tokens: run.Graph.boundModels?.thinkingBudget
-                ? run.Graph.clientOptions.thinkingBudget
-                : 2000,
-            };
-            delete run.Graph.boundModel.temperature;
+        if (run.Graph.boundModel?.thinking || run.Graph.clientOptions?.thinking) {
+           console.log("thinking");
+          if (!run.Graph.boundModel?.modelKwargs) {
+            run.Graph.boundModel.modelKwargs = {};
+           }
+          run.Graph.boundModel.modelKwargs.thinking = {
+            type: 'enabled',
+            budget_tokens: run.Graph.boundModels?.thinkingBudget
+              ? run.Graph.clientOptions.thinkingBudget
+              : 2000,
+          }
+          delete run.Graph.boundModel.temperature;
+        } else if (
+          run.Graph.boundModel?.reasoning_effort ||
+          run.Graph.boundModel?.reasoning ||
+          run.Graph.clientOptions?.reasoning_effort
+        ) {
+          console.log("run reasoning");
+          run.Graph.boundModel.modelKwargs.thinking = {
+            type: 'enabled',
+            budget_tokens: run.Graph.boundModels?.thinkingBudget
+              ? run.Graph.clientOptions.thinkingBudget
+              : 2000,
+          }
+          delete run.Graph.boundModel.temperature;
           }
 
           //for mcp servers

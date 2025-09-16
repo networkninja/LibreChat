@@ -955,6 +955,10 @@ class BaseClient {
       }
     }
 
+    if (fieldsToKeep.thinking) {
+      fieldsToKeep.budget_tokens = fieldsToKeep.thinking.budget_tokens;
+      fieldsToKeep.thinking = fieldsToKeep.thinking.enabled ? true : false;
+    }
     const conversation = await saveConvo(this.options?.req, fieldsToKeep, {
       context: 'api/app/clients/BaseClient.js - saveMessageToDatabase #saveConvo',
       unsetFields,
@@ -1075,17 +1079,21 @@ class BaseClient {
       tokensPerMessage = 4;
       tokensPerName = -1;
     }
-
+    let thinkingSet = false;
     const processValue = (value) => {
       if (Array.isArray(value)) {
         for (let item of value) {
           if (
             !item ||
             !item.type ||
-            item.type === ContentTypes.THINK ||
             item.type === ContentTypes.ERROR ||
             item.type === ContentTypes.IMAGE_URL
           ) {
+            continue;
+          }
+
+          if (item.type === ContentTypes.THINK) {
+            thinkingSet = true;
             continue;
           }
 
@@ -1100,7 +1108,17 @@ class BaseClient {
               numTokens += this.getTokenCount(args);
             }
 
-            const output = item.tool_call?.output || '';
+            let output = item.tool_call?.output || '';
+            const outputParsed = JSON.parse(output);
+            if (outputParsed[0].type == 'text') {
+              let thinkingString = {
+                type: 'thinking',
+                thinking: '',
+              };
+              outputParsed.unshift(thinkingString);
+              output = JSON.stringify(outputParsed);
+            }
+
             if (output != null && output && typeof output === 'string') {
               numTokens += this.getTokenCount(output);
             }
