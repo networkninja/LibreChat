@@ -11,6 +11,7 @@ const {
   genAzureChatCompletion,
   getModelMaxOutputTokens,
   createStreamEventHandlers,
+  configureReasoning,
 } = require('@librechat/api');
 const {
   Constants,
@@ -33,7 +34,6 @@ const {
   titleInstruction,
   createContextHandlers,
 } = require('./prompts');
-const { configureReasoning } = require('~/server/services/Endpoints/anthropic/helpers');
 const { encodeAndFormat } = require('~/server/services/Files/images/encode');
 const { addSpaceIfNeeded, sleep } = require('~/server/utils');
 const { spendTokens } = require('~/models/spendTokens');

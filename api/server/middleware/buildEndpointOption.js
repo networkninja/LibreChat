@@ -27,8 +27,8 @@ const buildFunction = {
   [EModelEndpoint.assistants]: assistants.buildOptions,
   [EModelEndpoint.azureAssistants]: azureAssistants.buildOptions,
 };
-const thinkingModelsRegex = 
-  /^(anthropic-)?claude-([34]([.-]7)?-(sonnet|opus)(-latest)?|sonnet-4-\d{8})$|^groq-deepseek-r1-distill-llama-70b$/;
+const thinkingModelsRegex =
+  /^(anthropic-)?claude-([34]([.-]7)?-(sonnet|opus)(-latest)?|sonnet-4(-\d{8})?|sonnet-4)$|^groq-deepseek-r1-distill-llama-70b$/;
 
 async function buildEndpointOption(req, res, next) {
   const { endpoint, endpointType } = req.body;

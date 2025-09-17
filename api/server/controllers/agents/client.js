@@ -8,7 +8,6 @@ const {
   Tokenizer,
   checkAccess,
   logAxiosError,
-  resolveHeaders,
   getBalanceConfig,
   resolveHeaders,
   memoryInstructions,
@@ -41,8 +40,10 @@ const {
 const { addCacheControl, createContextHandlers } = require('~/app/clients/prompts');
 const { initializeAgent } = require('~/server/services/Endpoints/agents/agent');
 const { spendTokens, spendStructuredTokens } = require('~/models/spendTokens');
+const { getFormattedMemories, deleteMemory, setMemory } = require('~/models');
 const { encodeAndFormat } = require('~/server/services/Files/images/encode');
 const { getProviderConfig } = require('~/server/services/Endpoints');
+const { checkCapability } = require('~/server/services/Config');
 const BaseClient = require('~/app/clients/BaseClient');
 const { getRoleByName } = require('~/models/Role');
 const { loadAgent } = require('~/models/Agent');
@@ -927,12 +928,6 @@ class AgentClient extends BaseClient {
         if (agent.useLegacyContent === true) {
           messages = formatContentStrings(messages);
         }
-        console.log("agent.model_parameters?.clientOptions", agent.model_parameters);
-        if (
-          agent.model_parameters?.clientOptions?.defaultHeaders?.['anthropic-beta']?.includes(
-            'prompt-caching',
-          )
-        ) {
         const defaultHeaders =
           agent.model_parameters?.clientOptions?.defaultHeaders ??
           agent.model_parameters?.configuration?.defaultHeaders;
@@ -1022,21 +1017,6 @@ class AgentClient extends BaseClient {
           contentData.push(agentUpdate);
           run.Graph.contentData = contentData;
         }
-
-        try {
-          if (await hasCustomUserVars()) {
-            config.configurable.userMCPAuthMap = await getMCPAuthMap({
-              tools: agent.tools,
-              userId: this.options.req.user.id,
-              findPluginAuthsByKeys,
-            });
-          }
-        } catch (err) {
-          logger.error(
-            `[api/server/controllers/agents/client.js #chatCompletion] Error getting custom user vars for agent ${agent.id}`,
-            err,
-          );
-        }
         //needs to be manually set for thinking to work with OpenAI langchain with claude. only needs for provider == 'openAI and NOT GROQ
         //if undefined means MCP server being used
         if (
@@ -1047,31 +1027,31 @@ class AgentClient extends BaseClient {
             run.Graph.boundModel.modelKwargs = {};
           }
           //  console.log("run 2", run.Graph.clientOptions, run.Graph.boundModel);
-        if (run.Graph.boundModel?.thinking || run.Graph.clientOptions?.thinking) {
-           console.log("thinking");
-          if (!run.Graph.boundModel?.modelKwargs) {
-            run.Graph.boundModel.modelKwargs = {};
-           }
-          run.Graph.boundModel.modelKwargs.thinking = {
-            type: 'enabled',
-            budget_tokens: run.Graph.boundModels?.thinkingBudget
-              ? run.Graph.clientOptions.thinkingBudget
-              : 2000,
-          }
-          delete run.Graph.boundModel.temperature;
-        } else if (
-          run.Graph.boundModel?.reasoning_effort ||
-          run.Graph.boundModel?.reasoning ||
-          run.Graph.clientOptions?.reasoning_effort
-        ) {
-          console.log("run reasoning");
-          run.Graph.boundModel.modelKwargs.thinking = {
-            type: 'enabled',
-            budget_tokens: run.Graph.boundModels?.thinkingBudget
-              ? run.Graph.clientOptions.thinkingBudget
-              : 2000,
-          }
-          delete run.Graph.boundModel.temperature;
+          if (run.Graph.boundModel?.thinking || run.Graph.clientOptions?.thinking) {
+            console.log("thinking");
+            if (!run.Graph.boundModel?.modelKwargs) {
+              run.Graph.boundModel.modelKwargs = {};
+            }
+            run.Graph.boundModel.modelKwargs.thinking = {
+              type: 'enabled',
+              budget_tokens: run.Graph.boundModels?.thinkingBudget
+                ? run.Graph.clientOptions.thinkingBudget
+                : 2000,
+            }
+            delete run.Graph.boundModel.temperature;
+          } else if (
+            run.Graph.boundModel?.reasoning_effort ||
+            run.Graph.boundModel?.reasoning ||
+            run.Graph.clientOptions?.reasoning_effort
+          ) {
+            console.log("run reasoning");
+            run.Graph.boundModel.modelKwargs.thinking = {
+              type: 'enabled',
+              budget_tokens: run.Graph.boundModels?.thinkingBudget
+                ? run.Graph.clientOptions.thinkingBudget
+                : 2000,
+            }
+            delete run.Graph.boundModel.temperature;
           }
 
           //for mcp servers

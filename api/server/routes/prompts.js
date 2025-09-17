@@ -197,7 +197,6 @@ router.get('/groups', async (req, res) => {
       publicPromptGroupIds: publiclyAccessibleIds,
     });
 
-    // Cursor-based pagination only
     const result = await getListPromptGroupsByAccess({
       accessibleIds: filteredAccessibleIds,
       otherParams: filter,
@@ -206,21 +205,19 @@ router.get('/groups', async (req, res) => {
     });
 
     if (!result) {
-      const emptyResponse = createEmptyPromptGroupsResponse({
-        pageNumber: '1',
-        pageSize: actualLimit,
-        actualLimit,
-      });
+      const emptyResponse = createEmptyPromptGroupsResponse({ pageNumber, pageSize, actualLimit });
       return res.status(200).send(emptyResponse);
     }
 
     const { data: promptGroups = [], has_more = false, after = null } = result;
+
     const groupsWithPublicFlag = markPublicPromptGroups(promptGroups, publiclyAccessibleIds);
 
     const response = formatPromptGroupsResponse({
       promptGroups: groupsWithPublicFlag,
-      pageNumber: '1', // Always 1 for cursor-based pagination
-      pageSize: actualLimit.toString(),
+      pageNumber,
+      pageSize,
+      actualLimit,
       hasMore: has_more,
       after,
     });
@@ -434,7 +431,7 @@ router.get('/', async (req, res) => {
 /**
  * Deletes a prompt
  *
- * @param {ServerRequest} req - The request object.
+ * @param {Express.Request} req - The request object.
  * @param {TDeletePromptVariables} req.params - The request parameters
  * @param {import('mongoose').ObjectId} req.params.promptId - The prompt ID
  * @param {Express.Response} res - The response object.
