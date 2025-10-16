@@ -136,6 +136,7 @@ const anthropicModels = {
   'claude-4': 200000,
   'claude-opus-4': 200000,
   'claude-opus-4-5': 200000,
+  'claude-sonnet-4-5': 200000,
 };
 
 const deepseekModels = {
@@ -346,6 +347,7 @@ const anthropicMaxOutputs = {
   'claude-3-5-sonnet': 8192,
   'claude-3.7-sonnet': 128000,
   'claude-3-7-sonnet': 128000,
+  'claude-4-5-sonnet': 64000,
 };
 
 /** Outputs from https://api-docs.deepseek.com/quick_start/pricing */
