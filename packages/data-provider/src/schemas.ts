@@ -324,7 +324,7 @@ export const anthropicSettings = {
     step: 1 as const,
     default: DEFAULT_MAX_OUTPUT,
     reset: (modelName: string) => {
-      if (/claude-3[-.]5-sonnet/.test(modelName) || /claude-3[-.]7/.test(modelName)) {
+      if (/claude-[3-4][-.][057]\-sonnet/.test(modelName)) {
         return DEFAULT_MAX_OUTPUT;
       }
 
