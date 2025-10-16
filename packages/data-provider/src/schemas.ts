@@ -329,12 +329,10 @@ export const anthropicSettings = {
       }
 
       return 4096;
+      return 4096;
     },
     set: (value: number, modelName: string) => {
-      if (
-        !(/claude-3[-.]5-sonnet/.test(modelName) || /claude-3[-.]7/.test(modelName)) &&
-        value > LEGACY_ANTHROPIC_MAX_OUTPUT
-      ) {
+      if (!/claude-[3-4][-.][057]\-sonnet/.test(modelName) && value > LEGACY_ANTHROPIC_MAX_OUTPUT) {
         return LEGACY_ANTHROPIC_MAX_OUTPUT;
       }
 
