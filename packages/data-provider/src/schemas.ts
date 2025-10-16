@@ -389,19 +389,11 @@ export const anthropicSettings = {
         return CLAUDE_32K_MAX_OUTPUT;
       }
 
-      return DEFAULT_MAX_OUTPUT;
+      return 4096;
     },
     set: (value: number, modelName: string) => {
-      if (/claude-(?:sonnet|haiku)[-.]?[4-9]/.test(modelName) && value > CLAUDE_4_64K_MAX_OUTPUT) {
-        return CLAUDE_4_64K_MAX_OUTPUT;
-      }
-
-      if (/claude-(?:opus|haiku)[-.]?[4-9]/.test(modelName) && value > CLAUDE_32K_MAX_OUTPUT) {
-        return CLAUDE_32K_MAX_OUTPUT;
-      }
-
-      if (value > ANTHROPIC_MAX_OUTPUT) {
-        return ANTHROPIC_MAX_OUTPUT;
+      if (!/claude-[3-4][-.][057]\-sonnet/.test(modelName) && value > LEGACY_ANTHROPIC_MAX_OUTPUT) {
+        return LEGACY_ANTHROPIC_MAX_OUTPUT;
       }
 
       return value;
