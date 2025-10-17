@@ -12,7 +12,7 @@ const useAgentDefaultPermissionLevel = () => {
 
   // When marketplace is active: EDIT permissions (builder mode)
   // When marketplace is not active: VIEW permissions (browse mode)
-  return hasMarketplaceAccess ? PermissionBits.EDIT : PermissionBits.VIEW;
+  return PermissionBits.VIEW;
 };
 
 export default useAgentDefaultPermissionLevel;
