@@ -13,7 +13,7 @@ import { isEphemeralAgent } from '~/common';
  */
 export const defaultAgentParams: t.AgentListParams = {
   limit: 10,
-  requiredPermission: PermissionBits.EDIT,
+  requiredPermission: PermissionBits.VIEW,
 };
 /**
  * Hook for getting all available tools for A
