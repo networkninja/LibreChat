@@ -90,19 +90,19 @@ export default function ModelPanel({
       endpointTypeCheck = getEndpointField(endpointsConfig, 'anthropic', 'type');
       console.log('🔄 Overriding provider to anthropic for thinking model:', model);
     }
-    
+
     const customParams = endpointsConfig[providerCheck]?.customParams ?? {};
     const [combinedKey, endpointKey] = getSettingsKeys(endpointTypeCheck ?? providerCheck, model ?? '');
     const overriddenEndpointKey = customParams.defaultParamsEndpoint ?? endpointKey;
     const defaultParams =
       agentParamSettings[combinedKey] ?? agentParamSettings[overriddenEndpointKey] ?? [];
-    
+
     console.log('defaultParams', defaultParams, overriddenEndpointKey, combinedKey, endpointKey);
     console.log('providerCheck:', providerCheck, 'endpointTypeCheck:', endpointTypeCheck);
-    
+
     const overriddenParams = endpointsConfig[providerCheck]?.customParams?.paramDefinitions ?? [];
     const overriddenParamsMap = keyBy(overriddenParams, 'key');
-    
+
     const allParameters = defaultParams
       .filter((param) => param != null)
       .map((param) => (overriddenParamsMap[param.key] as SettingDefinition) ?? param);
@@ -110,9 +110,9 @@ export default function ModelPanel({
     // Filter out specific parameters
     const parametersToRemove = ['web_search'];
     const filteredParameters = allParameters.filter(
-      setting => !parametersToRemove.includes(setting.key)
+      (setting) => !parametersToRemove.includes(setting.key),
     );
-        
+
     return filteredParameters;
   }, [endpointType, endpointsConfig, model, provider, thinkingModelsRegex]);
 
