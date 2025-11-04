@@ -28,6 +28,9 @@ const buildFunction = {
   [EModelEndpoint.azureAssistants]: azureAssistants.buildOptions,
 };
 
+const thinkingModelsRegex =
+  /^(anthropic-)?claude-(3\.7|4([.-]\d+)?-(sonnet|opus)(-latest)?|sonnet-4(-\d{8})?)$|^groq-deepseek-r1-distill-llama-70b$/;
+
 async function buildEndpointOption(req, res, next) {
   const { endpoint, endpointType } = req.body;
   let parsedBody;
@@ -84,6 +87,21 @@ async function buildEndpointOption(req, res, next) {
 
     // TODO: use object params
     req.body.endpointOption = await builder(endpoint, parsedBody, endpointType);
+
+    if (thinkingModelsRegex.test(req.body.model) && req.body?.reasoning_effort) {
+      req.body.endpointOption.model_parameters.reasoning_effort =
+        req.body.endpointOption.model_parameters.reasoning_effort ?? req.body.reasoning_effort;    
+    } else if (
+      thinkingModelsRegex.test(req.body.model) &&
+      (req.body?.thinking != false || !req.body.thinking)
+    ) {
+      req.body.endpointOption.model_parameters.thinking = {
+        type: 'enabled',
+        budget_tokens: req.body.thinkingBudget
+          ?  req.body.endpointOption.model_parameters.thinkingBudget
+          : 2000,
+      };
+    }
 
     if (req.body.files && !isAgents) {
       req.body.endpointOption.attachments = processFiles(req.body.files);
