@@ -3,6 +3,7 @@ const { logger } = require('@librechat/data-schemas');
 const { DynamicStructuredTool } = require('@langchain/core/tools');
 const { getBufferString, HumanMessage } = require('@langchain/core/messages');
 const {
+  GraphEvents,
   createRun,
   Tokenizer,
   checkAccess,
@@ -76,9 +77,17 @@ const payloadParser = ({ req, agent, endpoint }) => {
       parsedValues.thinking = false;
     }
     return parsedValues;
+  } else if (endpoint === EModelEndpoint.anthropic) {
+    if (req.body.endpointOption.model_parameters.thinking) {
+      delete req.body.endpointOption.model_parameters.temperature;
+    }
   }
   return req.body.endpointOption.model_parameters;
 };
+
+const noSystemModelRegex = [
+  /\b(o1-preview|o1-mini|amazon\.titan-text|anthropic|claude|claude-instant|claude-2|claude-3)\b/gi,
+];
 
 function createTokenCounter(encoding) {
   return function (message) {
@@ -92,6 +101,56 @@ function logToolError(graph, error, toolId) {
     error,
     message: `[api/server/controllers/agents/client.js #chatCompletion] Tool Error "${toolId}"`,
   });
+}
+
+function extractAdditionalKwargs(data) {
+  // Create a copy of the original data
+  const result = { ...data.chunk };
+
+  // Check if additional_kwargs exists in the data
+  if (result.additional_kwargs) {
+    // Extract reasoning_content from the nested structure
+    let reasoningContent = null;
+    if (
+      result.additional_kwargs.__raw_response &&
+      result.additional_kwargs.__raw_response.choices &&
+      result.additional_kwargs.__raw_response.choices[0] &&
+      result.additional_kwargs.__raw_response.choices[0].delta
+    ) {
+      reasoningContent = result.additional_kwargs.__raw_response.choices[0].delta.reasoning_content;
+      console.log('extractAdditionalKwargs', reasoningContent);
+    }
+
+    // Replace the entire additional_kwargs with an object containing only reasoning_content
+    result.additional_kwargs = {
+      reasoning_content: reasoningContent,
+    };
+  }
+
+  // Also handle the case where additional_kwargs is in lc_kwargs
+  if (result.lc_kwargs && result.lc_kwargs.additional_kwargs) {
+    // Extract additional_kwargs from kwargs and place at top level
+    const { additional_kwargs, ...restKwargs } = result.lc_kwargs;
+    result.lc_kwargs = restKwargs;
+
+    // Extract reasoning_content from the nested structure
+    let reasoningContent = null;
+    if (
+      additional_kwargs.__raw_response &&
+      additional_kwargs.__raw_response.choices &&
+      additional_kwargs.__raw_response.choices[0] &&
+      additional_kwargs.__raw_response.choices[0].delta
+    ) {
+      reasoningContent = additional_kwargs.__raw_response.choices[0].delta.reasoning_content;
+    }
+
+    // Set additional_kwargs to only contain reasoning_content
+    result.additional_kwargs = {
+      reasoning_content: reasoningContent,
+    };
+  }
+
+  return result;
 }
 
 /**
@@ -148,7 +207,6 @@ function applyAgentLabelsToHistory(orderedMessages, primaryAgent, agentConfigs) 
 
   return processedMessages;
 }
-
 class AgentClient extends BaseClient {
   constructor(options = {}) {
     super(null, options);
@@ -931,10 +989,37 @@ class AgentClient extends BaseClient {
           indexTokenCountMap,
           runId: this.responseMessageId,
           signal: abortController.signal,
-          customHandlers: this.options.eventHandlers,
-          requestBody: config.configurable.requestBody,
-          user: createSafeUser(this.options.req?.user),
-          tokenCounter: createTokenCounter(this.getEncoding()),
+          customHandlers: {
+            ...this.options.eventHandlers,
+            requestBody: config.configurable.requestBody,
+            user: createSafeUser(this.options.req?.user),
+            tokenCounter: createTokenCounter(this.getEncoding()),
+            //needed to parse thinking values
+            [GraphEvents.CHAT_MODEL_STREAM]: {
+              /**
+               * Handle HAT_MODEL_STREAM event.
+               * @param {string} event - The event name.
+               * @param {StreamEventData} data - The event data.
+               * @param {GraphRunnableConfig['configurable']} [metadata] The runnable metadata.
+               */
+              handle: (event, data, metadata, graph) => {
+                if (
+                  data.chunk?.lc_kwargs?.additional_kwargs?.__raw_response?.choices?.[0]?.delta
+                    ?.reasoning_content
+                ) {
+                  data.chunk = extractAdditionalKwargs(data);
+                }
+                if (this.options.eventHandlers[GraphEvents.CHAT_MODEL_STREAM]) {
+                  this.options.eventHandlers?.[GraphEvents.CHAT_MODEL_STREAM].handle(
+                    event,
+                    data,
+                    metadata,
+                    graph,
+                  );
+                }
+              },
+            },
+          },
         });
 
         if (!run) {
@@ -944,6 +1029,30 @@ class AgentClient extends BaseClient {
         this.run = run;
         if (userMCPAuthMap != null) {
           config.configurable.userMCPAuthMap = userMCPAuthMap;
+        }
+        if (run.Graph.boundModel?.thinking || run.Graph.clientOptions?.thinking) {
+          if (!run.Graph.boundModel?.modelKwargs) {
+            run.Graph.boundModel.modelKwargs = {};
+          }
+          run.Graph.boundModel.modelKwargs.thinking = {
+            type: 'enabled',
+            budget_tokens: run.Graph.boundModels?.thinkingBudget
+              ? run.Graph.clientOptions.thinkingBudget
+              : 2000,
+          };
+          delete run.Graph.boundModel.temperature;
+        } else if (
+          run.Graph.boundModel?.reasoning_effort ||
+          run.Graph.boundModel?.reasoning ||
+          run.Graph.clientOptions?.reasoning_effort
+        ) {
+          run.Graph.boundModel.modelKwargs.thinking = {
+            type: 'enabled',
+            budget_tokens: run.Graph.boundModels?.thinkingBudget
+              ? run.Graph.clientOptions.thinkingBudget
+              : 2000,
+          };
+          delete run.Graph.boundModel.temperature;
         }
 
         /** @deprecated Agent Chain */
