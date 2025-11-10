@@ -18,17 +18,25 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
   const [visibleArtifacts, setVisibleArtifacts] = useRecoilState(store.visibleArtifacts);
 
   const debouncedSetVisibleRef = useRef(
-    debounce((artifactToSet: Artifact) => {
-      logger.log(
-        'artifacts_visibility',
-        'Setting artifact to visible state from Artifact button',
-        artifactToSet,
-      );
-      setVisibleArtifacts((prev) => ({
-        ...prev,
-        [artifactToSet.id]: artifactToSet,
-      }));
-    }, 750),
+    debounce(
+      (artifactToSet: Artifact, currentVisible: Record<string, Artifact | undefined> | null) => {
+        // Guard: Only update if the artifact is not already visible or has changed
+        if (currentVisible) {
+          const existingArtifact = currentVisible[artifactToSet.id];
+        }
+
+        console.log(
+          'artifacts_visibility',
+          'Setting artifact to visible state from Artifact button',
+          artifactToSet,
+        );
+        setVisibleArtifacts((prev) => ({
+          ...prev,
+          [artifactToSet.id]: artifactToSet,
+        }));
+      },
+      750,
+    ),
   );
 
   useEffect(() => {
@@ -41,11 +49,12 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
     }
 
     const debouncedSetVisible = debouncedSetVisibleRef.current;
-    debouncedSetVisible(artifact);
+    debouncedSetVisible(artifact, visibleArtifacts);
     return () => {
       debouncedSetVisible.cancel();
     };
-  }, [artifact, location.pathname]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artifact?.id, artifact?.content, location.pathname]);
 
   if (artifact === null || artifact === undefined) {
     return null;
@@ -60,7 +69,8 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
           if (!location.pathname.includes('/c/')) {
             return;
           }
-          resetCurrentArtifactId();
+          console.log('[ArtifactButton] Clicked:', { id: artifact.id, title: artifact.title });
+          setCurrentArtifactId(artifact.id);
           setVisible(true);
           if (artifacts?.[artifact.id] == null) {
             setArtifacts(visibleArtifacts);

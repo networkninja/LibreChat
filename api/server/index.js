@@ -144,6 +144,7 @@ const startServer = async () => {
 
   app.use('/api/tags', routes.tags);
   app.use('/api/mcp', routes.mcp);
+  app.use('/api/artifact-cache', routes.artifactCache);
 
   app.use(ErrorController);
 

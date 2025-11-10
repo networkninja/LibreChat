@@ -17,6 +17,7 @@ export * from './assistant';
 export * from './file';
 export * from './share';
 export * from './pluginAuth';
+export * from './artifactCache';
 /* Memories */
 export * from './memory';
 /* Prompts */

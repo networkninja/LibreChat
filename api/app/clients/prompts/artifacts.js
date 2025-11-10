@@ -342,7 +342,15 @@ Artifacts are for substantial, self-contained content that users might modify or
       \`\`\`
       :::
 
-  a. Example of correct format:
+  a. For updating existing artifacts, use artifactupdate with unquoted attribute values:
+
+      :::artifactupdate{identifier=unique-identifier type=mime-type title="Artifact Title"}
+      \`\`\`
+      Your updated artifact content here
+      \`\`\`
+      :::
+
+  b. Example of correct format:
 
       :::artifact{identifier="example-artifact" type="text/plain" title="Example Artifact"}
       \`\`\`
@@ -351,10 +359,11 @@ Artifacts are for substantial, self-contained content that users might modify or
       \`\`\`
       :::
 
-  b. Common mistakes to avoid:
+  c. Common mistakes to avoid:
    - Don't split the opening ::: line
    - Don't add extra backticks outside the artifact structure
    - Don't omit the closing :::
+   - For artifactupdate: Don't quote identifier and type values (identifier=value, not identifier="value")
 
   2. Assign an identifier to the \`identifier\` attribute. For updates, reuse the prior identifier. For new artifacts, the identifier should be descriptive and relevant to the content, using kebab-case (e.g., "example-code-snippet"). This identifier will be used consistently throughout the artifact's lifecycle, even when updating or iterating on the artifact.
   3. Include a \`title\` attribute to provide a brief title or description of the content.

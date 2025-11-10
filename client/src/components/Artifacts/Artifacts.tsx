@@ -9,7 +9,6 @@ import { useEditorContext } from '~/Providers';
 import ArtifactTabs from './ArtifactTabs';
 import { CopyCodeButton } from './Code';
 import { useLocalize } from '~/hooks';
-import { cn } from '~/utils';
 import store from '~/store';
 
 export default function Artifacts() {
@@ -19,6 +18,7 @@ export default function Artifacts() {
   const previewRef = useRef<SandpackPreviewRef>();
   const [isVisible, setIsVisible] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const setArtifactsVisible = useSetRecoilState(store.artifactsVisibility);
 
   useEffect(() => {
@@ -35,16 +35,28 @@ export default function Artifacts() {
     orderedArtifactIds,
   } = useArtifacts();
 
-  if (currentArtifact === null || currentArtifact === undefined) {
+  // Always use the display artifact (merged/cached if available)
+  const displayArtifact = currentArtifact;
+
+  if (displayArtifact === null || displayArtifact === undefined) {
     return null;
   }
 
   const handleRefresh = () => {
     setIsRefreshing(true);
-    const client = previewRef.current?.getClient();
-    if (client != null) {
-      client.dispatch({ type: 'refresh' });
+
+    // Refresh the preview client if we're on preview tab
+    if (activeTab === 'preview') {
+      const client = previewRef.current?.getClient();
+      if (client != null) {
+        client.dispatch({ type: 'refresh' });
+      }
     }
+
+    // Force re-render of the artifact content by updating the refresh key
+    // This ensures the latest artifact content is displayed
+    setRefreshKey((prev) => prev + 1);
+
     setTimeout(() => setIsRefreshing(false), 750);
   };
 
@@ -59,10 +71,9 @@ export default function Artifacts() {
       <div className="flex h-full w-full items-center justify-center">
         {/* Main Container */}
         <div
-          className={cn(
-            `flex h-full w-full flex-col overflow-hidden border border-border-medium bg-surface-primary text-xl text-text-primary shadow-xl transition-all duration-500 ease-in-out`,
-            isVisible ? 'scale-100 opacity-100 blur-0' : 'scale-105 opacity-0 blur-sm',
-          )}
+          className={`flex h-full w-full flex-col overflow-hidden border border-border-medium bg-surface-primary text-xl text-text-primary shadow-xl transition-all duration-500 ease-in-out ${
+            isVisible ? 'scale-100 opacity-100 blur-0' : 'scale-105 opacity-0 blur-sm'
+          }`}
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border-medium bg-surface-primary-alt p-2">
@@ -70,23 +81,22 @@ export default function Artifacts() {
               <button className="mr-2 text-text-secondary" onClick={closeArtifacts}>
                 <ArrowLeft className="h-4 w-4" />
               </button>
-              <h3 className="truncate text-sm text-text-primary">{currentArtifact.title}</h3>
+              <h3 className="truncate text-sm text-text-primary">{displayArtifact.title}</h3>
             </div>
             <div className="flex items-center">
               {/* Refresh button */}
               {activeTab === 'preview' && (
                 <button
-                  className={cn(
-                    'mr-2 text-text-secondary transition-transform duration-500 ease-in-out',
-                    isRefreshing ? 'rotate-180' : '',
-                  )}
+                  className={`mr-2 text-text-secondary transition-transform duration-500 ease-in-out ${
+                    isRefreshing ? 'rotate-180' : ''
+                  }`}
                   onClick={handleRefresh}
                   disabled={isRefreshing}
                   aria-label="Refresh"
                 >
                   <RefreshCw
                     size={16}
-                    className={cn('transform', isRefreshing ? 'animate-spin' : '')}
+                    className={`transform ${isRefreshing ? 'animate-spin' : ''}`}
                   />
                 </button>
               )}
@@ -116,8 +126,9 @@ export default function Artifacts() {
           </div>
           {/* Content */}
           <ArtifactTabs
+            key={refreshKey}
             isMermaid={isMermaid}
-            artifact={currentArtifact}
+            artifact={displayArtifact}
             editorRef={editorRef as React.MutableRefObject<CodeEditorRef>}
             previewRef={previewRef as React.MutableRefObject<SandpackPreviewRef>}
           />
@@ -135,9 +146,9 @@ export default function Artifacts() {
               </button>
             </div>
             <div className="flex items-center gap-2">
-              <CopyCodeButton content={currentArtifact.content ?? ''} />
+              <CopyCodeButton content={displayArtifact.content ?? ''} />
               {/* Download Button */}
-              <DownloadArtifact artifact={currentArtifact} />
+              <DownloadArtifact artifact={displayArtifact} />
               {/* Publish button */}
               {/* <button className="border-0.5 min-w-[4rem] whitespace-nowrap rounded-md border-border-medium bg-[radial-gradient(ellipse,_var(--tw-gradient-stops))] from-surface-active from-50% to-surface-active px-3 py-1 text-xs font-medium text-text-primary transition-colors hover:bg-surface-active hover:text-text-primary active:scale-[0.985] active:bg-surface-active">
                 Publish
