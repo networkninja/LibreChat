@@ -73,9 +73,6 @@ const MessageRender = memo(
     const showCardRender = isLast && !isSubmittingFamily && isCard;
     const isLatestCard = isCard && !isSubmittingFamily && isLatestMessage;
 
-    /** Only pass isSubmitting to the latest message to prevent unnecessary re-renders */
-    const effectiveIsSubmitting = isLatestMessage ? isSubmitting : false;
-
     const iconData: TMessageIcon = useMemo(
       () => ({
         endpoint: msg?.endpoint ?? conversation?.endpoint,
@@ -174,8 +171,7 @@ const MessageRender = memo(
                   messageId: msg.messageId,
                   conversationId: conversation?.conversationId,
                   isExpanded: false,
-                  isSubmitting: effectiveIsSubmitting,
-                  isLatestMessage,
+                  message: msg, // Add the full message object
                 }}
               >
                 {msg.plugin && <Plugin plugin={msg.plugin} />}
@@ -187,7 +183,7 @@ const MessageRender = memo(
                   message={msg}
                   enterEdit={enterEdit}
                   error={!!(msg.error ?? false)}
-                  isSubmitting={effectiveIsSubmitting}
+                  isSubmitting={isSubmitting}
                   unfinished={msg.unfinished ?? false}
                   isCreatedByUser={msg.isCreatedByUser ?? true}
                   siblingIdx={siblingIdx ?? 0}
@@ -196,7 +192,7 @@ const MessageRender = memo(
               </MessageContext.Provider>
             </div>
 
-            {hasNoChildren && (isSubmittingFamily === true || effectiveIsSubmitting) ? (
+            {hasNoChildren && (isSubmittingFamily === true || isSubmitting) ? (
               <PlaceholderRow isCard={isCard} />
             ) : (
               <SubRow classes="text-xs">

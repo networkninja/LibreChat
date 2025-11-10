@@ -79,6 +79,8 @@ export default function useChatFunctions({
       parentMessageId = null,
       conversationId = null,
       messageId = null,
+      artifactSectionUpdate = null,
+      systemInstructions = null,
     },
     {
       editedContent = null,
@@ -97,6 +99,9 @@ export default function useChatFunctions({
     }
 
     const conversation = cloneDeep(immutableConversation);
+    if (conversation) {
+      conversation.instructions = systemInstructions ?? undefined;
+    }
 
     const endpoint = conversation?.endpoint;
     if (endpoint === null) {
@@ -174,6 +179,19 @@ export default function useChatFunctions({
       endpointType: endpointType as EndpointSchemaKey,
       conversation: conversation ?? {},
     });
+    if (convo) {
+      //needed to explicitly call them, will fix
+      if (conversation?.maxOutputTokens) {
+        convo.maxOutputTokens = conversation?.maxOutputTokens;
+      }
+      if (conversation?.thinking || conversation?.thinking == false) {
+        convo.thinking = conversation?.thinking;
+      }
+      if (conversation?.thinkingBudget) {
+        convo.thinkingBudget = conversation?.thinkingBudget;
+      }
+    }
+    console.log('convo use chat Functions', convo);
 
     const { modelDisplayLabel } = endpointsConfig?.[endpoint ?? ''] ?? {};
     const endpointOption = Object.assign(
@@ -204,6 +222,7 @@ export default function useChatFunctions({
       messageId: isContinued && messageId != null && messageId ? messageId : intermediateId,
       thread_id,
       error: false,
+      extraSystemInstructions: systemInstructions ?? undefined,
     };
 
     const submissionFiles = overrideFiles ?? targetParentMessage?.files;
@@ -250,6 +269,7 @@ export default function useChatFunctions({
       iconURL: convo?.iconURL,
       model: convo?.model,
       error: false,
+      extraSystemInstructions: systemInstructions ?? undefined,
     };
 
     if (isAssistantsEndpoint(endpoint)) {

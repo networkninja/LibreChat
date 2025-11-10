@@ -91,6 +91,17 @@ export const handleDoubleClick: React.MouseEventHandler<HTMLElement> = (event) =
   selection.addRange(range);
 };
 
+// Recursively extract all text/code content from a deeply nested node tree
+export function extractNodes(node: any): string {
+  if (!node) return '';
+  if (typeof node === 'string') return node;
+  if (node.value && typeof node.value === 'string') return node.value;
+  if (Array.isArray(node)) return node.map(extractNodes).join('');
+  if (node.props && node.props.children) return extractNodes(node.props.children);
+  if (node.children) return extractNodes(node.children);
+  return '';
+}
+
 export const extractContent = (
   children: React.ReactNode | { props: { children: React.ReactNode } } | string,
 ): string => {

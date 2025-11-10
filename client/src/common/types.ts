@@ -11,7 +11,6 @@ import type { TranslationKeys } from '~/hooks';
 export function isEphemeralAgent(agentId: string | null | undefined): boolean {
   return agentId == null || agentId === '' || agentId === Constants.EPHEMERAL_AGENT_ID;
 }
-
 export interface ConfigFieldDetail {
   title: string;
   description: string;
@@ -236,8 +235,11 @@ export type AgentPanelContextType = {
   mcps?: t.MCP[];
   setMcp: React.Dispatch<React.SetStateAction<t.MCP | undefined>>;
   setMcps: React.Dispatch<React.SetStateAction<t.MCP[] | undefined>>;
+  groupedTools: Record<string, t.AgentToolType & { tools?: t.AgentToolType[] }>;
   activePanel?: string;
-  regularTools?: t.TPlugin[];
+  tools: t.AgentToolType[];
+  mcp_prompts: any[]; // Replace 'any' with the correct type if available
+  pluginTools?: t.TPlugin[];
   setActivePanel: React.Dispatch<React.SetStateAction<Panel>>;
   setCurrentAgentId: React.Dispatch<React.SetStateAction<string | undefined>>;
   agent_id?: string;
@@ -352,6 +354,20 @@ export type TAskProps = {
   conversationId?: string | null;
   messageId?: string | null;
   clientTimestamp?: string;
+  artifactId?: string | null;
+  artifactType?: string | null;
+  artifactSectionUpdate?: artifactSectionUpdate;
+  systemInstructions?: string | null;
+};
+
+export type artifactSectionUpdate = {
+  startLine?: number;
+  endLine?: number;
+  startColumn?: number;
+  endColumn?: number;
+  fileKey?: string;
+  originalText?: string;
+  updateText?: string;
 };
 
 export type TOptions = {
