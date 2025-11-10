@@ -359,6 +359,15 @@ Artifacts are for substantial, self-contained content that users might modify or
       :::
 
   b. Example of correct format:
+  a. For updating existing artifacts, use artifactupdate with unquoted attribute values:
+
+      :::artifactupdate{identifier=unique-identifier type=mime-type title="Artifact Title"}
+      \`\`\`
+      Your updated artifact content here
+      \`\`\`
+      :::
+
+  b. Example of correct format:
 
       :::artifact{identifier="example-artifact" type="text/plain" title="Example Artifact"}
       \`\`\`

@@ -14,6 +14,10 @@ import { artifactCache } from './ArtifactCache';
 import store from '~/store';
 import { applyPartialUpdate } from '~/hooks/Artifacts/useArtifactUtlis';
 import { artifactRefreshTriggerState } from '~/hooks/Artifacts/useArtifacts';
+import { artifactCache } from './artifactCache';
+import store from '~/store';
+import { applyAllPartialUpdates } from '~/hooks/Artifacts/useArtifactUtlis';
+import { artifactRefreshTriggerState } from '~/hooks/Artifacts/useArtifacts';
 
 export const artifactPlugin: Pluggable = () => {
   return (tree) => {

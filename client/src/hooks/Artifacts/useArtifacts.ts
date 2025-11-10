@@ -318,6 +318,16 @@ export default function useArtifacts() {
     }
   }, [currentArtifactId, artifacts, setRefreshTrigger]);
 
+  // When switching to an artifactupdate, always trigger a refresh to ensure merge
+  useEffect(() => {
+    if (!currentArtifactId) return;
+    const current = artifacts?.[currentArtifactId];
+    if (current && current.type === 'artifactupdate') {
+      setRefreshTrigger((prev) => prev + 1);
+    }
+  }, [currentArtifactId, artifacts, setRefreshTrigger]);
+
+  // Handle artifact updates and tab switching during message generation
   useEffect(() => {
     // Check if we just finished submitting (transition from true to false)
     const justFinishedSubmitting = prevIsSubmittingRef.current && !isSubmitting;

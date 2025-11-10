@@ -443,6 +443,7 @@ CRITICAL RULES (follow in this order):
           sharedProps={sharedProps}
           currentCode={currentCode}
           startupConfig={startupConfig}
+          isMermaid={isMermaid}
         />
       </Tabs.Content>
     </div>
