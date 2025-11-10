@@ -33,6 +33,7 @@ export default function Artifacts() {
   const [blurAmount, setBlurAmount] = useState(0);
   const dragStartY = useRef(0);
   const dragStartHeight = useRef(90);
+  const [refreshKey, setRefreshKey] = useState(0);
   const setArtifactsVisible = useSetRecoilState(store.artifactsVisibility);
   const resetCurrentArtifactId = useResetRecoilState(store.currentArtifactId);
 
@@ -126,17 +127,28 @@ export default function Artifacts() {
       setHeight(90);
     }
   };
+  // Always use the display artifact (merged/cached if available)
+  const displayArtifact = currentArtifact;
 
-  if (!currentArtifact || !isMounted) {
+  if (displayArtifact === null || displayArtifact === undefined) {
     return null;
   }
 
   const handleRefresh = () => {
     setIsRefreshing(true);
-    const client = previewRef.current?.getClient();
-    if (client) {
-      client.dispatch({ type: 'refresh' });
+
+    // Refresh the preview client if we're on preview tab
+    if (activeTab === 'preview') {
+      const client = previewRef.current?.getClient();
+      if (client) {
+        client.dispatch({ type: 'refresh' });
+      }
     }
+
+    // Force re-render of the artifact content by updating the refresh key
+    // This ensures the latest artifact content is displayed
+    setRefreshKey((prev) => prev + 1);
+
     setTimeout(() => setIsRefreshing(false), 750);
   };
 
@@ -292,13 +304,22 @@ export default function Artifacts() {
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-primary">
             <div className="absolute inset-0 flex flex-col">
               <ArtifactTabs
-                artifact={currentArtifact}
+                key={refreshKey}
+                artifact={displayArtifact}
                 editorRef={editorRef as React.MutableRefObject<CodeEditorRef>}
                 previewRef={previewRef as React.MutableRefObject<SandpackPreviewRef>}
                 isSharedConvo={isSharedConvo}
               />
             </div>
 
+            <div
+              className={cn(
+                'absolute inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm transition-opacity duration-300 ease-in-out',
+                isRefreshing ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
+              )}
+              aria-hidden={!isRefreshing}
+              role="status"
+            ></div>
             <div
               className={cn(
                 'absolute inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm transition-opacity duration-300 ease-in-out',
@@ -315,20 +336,29 @@ export default function Artifacts() {
               >
                 <Spinner size={24} />
               </div>
+              <div className="flex items-center gap-2">
+                <CopyCodeButton content={displayArtifact.content ?? ''} />
+                {/* Download Button */}
+                <DownloadArtifact artifact={displayArtifact} />
+                {/* Publish button */}
+                {/* <button className="border-0.5 min-w-[4rem] whitespace-nowrap rounded-md border-border-medium bg-[radial-gradient(ellipse,_var(--tw-gradient-stops))] from-surface-active from-50% to-surface-active px-3 py-1 text-xs font-medium text-text-primary transition-colors hover:bg-surface-active hover:text-text-primary active:scale-[0.985] active:bg-surface-active">
+                  Publish
+                </button> */}
+              </div>
             </div>
-          </div>
 
-          {isMobile && (
-            <div className="flex-shrink-0 border-t border-border-light bg-surface-primary-alt p-2">
-              <Radio
-                fullWidth
-                options={tabOptions}
-                value={activeTab}
-                onChange={setActiveTab}
-                disabled={isMutating && activeTab !== 'code'}
-              />
-            </div>
-          )}
+            {isMobile && (
+              <div className="flex-shrink-0 border-t border-border-light bg-surface-primary-alt p-2">
+                <Radio
+                  fullWidth
+                  options={tabOptions}
+                  value={activeTab}
+                  onChange={setActiveTab}
+                  disabled={isMutating && activeTab !== 'code'}
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </Tabs.Root>

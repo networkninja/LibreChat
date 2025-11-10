@@ -379,7 +379,7 @@ export const anthropicSettings = {
     step: 1 as const,
     default: DEFAULT_MAX_OUTPUT,
     reset: (modelName: string) => {
-      if (/claude-[3-4][-.][057]\-sonnet/.test(modelName)) {
+      if (/claude-[3-4][-.][057]-sonnet/.test(modelName)) {
         return DEFAULT_MAX_OUTPUT;
       }
 
@@ -620,6 +620,7 @@ export const tMessageSchema = z.object({
   feedback: feedbackSchema.optional(),
   /** metadata */
   metadata: z.record(z.unknown()).optional(),
+  extraSystemInstructions: z.string().optional(),
 });
 
 export type MemoryArtifact = {
@@ -668,6 +669,7 @@ export type TMessage = z.input<typeof tMessageSchema> & {
   attachments?: TAttachment[];
   clientTimestamp?: string;
   feedback?: TFeedback;
+  extraSystemInstructions?: string;
 };
 
 export const coerceNumber = z.union([z.number(), z.string()]).transform((val) => {

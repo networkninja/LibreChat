@@ -76,6 +76,7 @@ export const fileTypes = {
   pdf: textDocument,
   'text/x-': codeFile,
   artifact: artifact,
+  updateartifact: artifact,
 
   /* Exact matches */
   // 'application/json':,
