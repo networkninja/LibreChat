@@ -117,10 +117,12 @@ export function applyPartialUpdate(
 
   if (startLine === endLine) {
     // Single-line selection: replace only the substring
-    const line = lines[startLine] || '';
-    const before = line.slice(0, startColumn);
-    const after = line.slice(endColumn);
-    lines[startLine] = before + updateContent + after;
+    //const line = lines[startLine] || '';
+    // const before = line.slice(0, startColumn);
+    // const after = line.slice(endColumn);
+    // //console.log("updateContent artifactutlis", updateContent, after);
+    lines[startLine] = updateContent;
+    //console.log("lines after single line update artifactutls", lines);
     return lines.join('\n');
   } else {
     // Multi-line selection: replace partial start/end lines and all lines in between
