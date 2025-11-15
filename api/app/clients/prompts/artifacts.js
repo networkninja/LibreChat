@@ -363,6 +363,7 @@ Artifacts are for substantial, self-contained content that users might modify or
    - Don't split the opening ::: line
    - Don't add extra backticks outside the artifact structure
    - Don't omit the closing :::
+   - Using a different format for the opening tag, you must use the exact format shown above
    - For artifactupdate: Don't quote identifier and type values (identifier=value, not identifier="value")
 
   2. Assign an identifier to the \`identifier\` attribute. For updates, reuse the prior identifier. For new artifacts, the identifier should be descriptive and relevant to the content, using kebab-case (e.g., "example-code-snippet"). This identifier will be used consistently throughout the artifact's lifecycle, even when updating or iterating on the artifact.
