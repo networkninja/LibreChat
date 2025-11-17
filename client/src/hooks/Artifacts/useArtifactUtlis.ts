@@ -91,6 +91,19 @@ export function applyPartialUpdate(
     console.log('previousArtifactId', previousArtifactId);
     cachedSelection = artifactCache.getSelection(previousArtifactId);
   }
+  // CRITICAL: Detect if update content is a full HTML/code replacement
+  // Check both size ratio AND if it looks like a complete document
+  const updateRatio = updateContent.length / originalContent.length;
+  if (updateRatio > 0.8) {
+    console.warn('Update content is similar size to original - treating as full replacement:', {
+      originalLength: originalContent.length,
+      updateLength: updateContent.length,
+      ratio: updateRatio,
+      preview: updateContent.substring(0, 100)
+    });
+    return updateContent;
+  }
+  
   // If no valid selection context, skip merging to avoid duplication
   if (
     !cachedSelection ||
@@ -100,10 +113,10 @@ export function applyPartialUpdate(
     typeof cachedSelection.endColumn !== 'number'
   ) {
     console.warn(
-      'No valid selection context found for partial update. Skipping merge for artifact:',
+      'No valid selection context found for partial update. Returning update content for artifact:',
       artifactId,
     );
-    return originalContent;
+    return updateContent;
   }
 
   // --- Precise merging using line and column ---
@@ -135,16 +148,16 @@ export function applyPartialUpdate(
     // console.log("beforeStart", beforeStart, "afterEnd", afterEnd);
     if (updateLines.length === 1) {
       // Single update line replaces the whole region
-      mergedUpdateLines = [beforeStart + updateLines[0] + afterEnd];
+      mergedUpdateLines = [updateLines[0]];
     } else if (updateLines.length === 2) {
       // Two lines: first line gets prefix, second gets suffix
-      mergedUpdateLines = [beforeStart + updateLines[0], updateLines[1] + afterEnd];
+      mergedUpdateLines = [updateLines[0], updateLines[1]];
     } else {
       // More than two lines: first line gets prefix, last gets suffix, middle lines as-is
       mergedUpdateLines = [
-        beforeStart + updateLines[0],
+        updateLines[0],
         ...updateLines.slice(1, -1),
-        updateLines[updateLines.length - 1] + afterEnd,
+        updateLines[updateLines.length - 1],
       ];
     }
     const mergedContent = [...before, ...mergedUpdateLines, ...after].join('\n');
