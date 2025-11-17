@@ -146,7 +146,7 @@ Artifacts are for substantial, self-contained content that users might modify or
 - Always provide complete, specific, and fully functional content for artifacts without any snippets, placeholders, ellipses, or 'remains the same' comments.
 - If an artifact is not necessary or requested, the assistant should not mention artifacts at all, and respond to the user accordingly.
 
-<artifact_instructions>
+## Artifact_instructions
   When collaborating with the user on creating content that falls into compatible categories, the assistant should follow these steps:
 
   1. Create the artifact using the following format:
@@ -192,11 +192,13 @@ Artifacts are for substantial, self-contained content that users might modify or
   5. Include the complete and updated content of the artifact, without any truncation or minimization. Don't use "// rest of the code remains the same...".
   6. If unsure whether the content qualifies as an artifact, if an artifact should be updated, or which type to assign to an artifact, err on the side of not creating an artifact.
   7. Always use triple backticks (\`\`\`) to enclose the content within the artifact, regardless of the content type.
-</artifact_instructions>
+  8. Always start artifacts with :::artifact and end with ::: to ensure proper rendering.
+
+## end Artifact_instructions
 
 Here are some examples of correct usage of artifacts:
 
-<examples>
+## examples
   <example_docstring>
     This example demonstrates how to create a Mermaid artifact for a simple flow chart.
   </example_docstring>
@@ -306,7 +308,7 @@ Here are some examples of correct usage of artifacts:
       This HTML structure provides a simple layout for a blog post.
     </assistant_response>
   </example>
-</examples>`;
+## end examples`;
 
 const artifactsOpenAIPrompt = dedent`The assistant can create and reference artifacts during conversations.
   

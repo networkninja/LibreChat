@@ -1,7 +1,7 @@
 import React, { useEffect, useCallback, useRef, useState } from 'react';
 import throttle from 'lodash/throttle';
 import { visit } from 'unist-util-visit';
-import { useRecoilState } from 'recoil';
+import { useRecoilState, useSetRecoilState } from 'recoil';
 import { useLocation } from 'react-router-dom';
 import type { Pluggable } from 'unified';
 import type { Artifact } from '~/common';
@@ -10,9 +10,9 @@ import { logger, extractContent, isArtifactRoute } from '~/utils';
 import { artifactsState } from '~/store/artifacts';
 import { extractNodes, extractContent } from '~/utils';
 import ArtifactButton from './ArtifactButton';
-import { artifactCache } from './artifactCache';
+import { artifactCache } from './ArtifactCache';
 import store from '~/store';
-import { applyAllPartialUpdates } from '~/hooks/Artifacts/useArtifactUtlis';
+import { applyPartialUpdate } from '~/hooks/Artifacts/useArtifactUtlis';
 import { artifactRefreshTriggerState } from '~/hooks/Artifacts/useArtifacts';
 
 export const artifactPlugin: Pluggable = () => {
@@ -109,11 +109,12 @@ export function Artifact({
 
   const [_artifacts, setArtifacts] = useRecoilState(artifactsState);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
-  const [_visibleArtifacts, setVisibleArtifacts] = useRecoilState(store.visibleArtifacts);
+  const [_visibleArtifacts, _setVisibleArtifacts] = useRecoilState(store.visibleArtifacts);
   const [_currentArtifactId, setCurrentArtifactId] = useRecoilState(store.currentArtifactId);
+  const setArtifactsVisible = useSetRecoilState(store.artifactsVisibility);
   const lastUpdateKey = useRef<string | null>(null);
   const lastContent = useRef<string | null>(null);
-  const [_refreshTrigger, setRefreshTrigger] = useRecoilState(artifactRefreshTriggerState);
+  const [_refreshTrigger, _setRefreshTrigger] = useRecoilState(artifactRefreshTriggerState);
   let displayArtifact;
 
   const throttledUpdateRef = useRef(
@@ -122,7 +123,55 @@ export function Artifact({
     }, 25),
   );
 
-  const getFirstArtifactInChain = useCallback(
+  // Helper function to check if message streaming is complete
+  function isFullyLoadedMessage(msg: any) {
+    if (!msg) return false;
+
+    // Check if message has finish reason or unfinished flag
+    if (msg.finish_reason === 'stop' || msg.finish_reason === 'length') {
+      return true;
+    }
+    if (msg.unfinished === false) {
+      return true;
+    }
+
+    // Check for artifact closing tags (reliable indicator of completion)
+    if (typeof msg.text === 'string') {
+      // Look for closing artifact tags
+      if (msg.text.includes(':::') && msg.text.lastIndexOf(':::') > msg.text.indexOf(':::')) {
+        return true; // Has both opening and closing :::
+      }
+    }
+
+    // For content-based checking
+    if (typeof msg.content === 'string') {
+      if (
+        msg.content.includes(':::') &&
+        msg.content.lastIndexOf(':::') > msg.content.indexOf(':::')
+      ) {
+        return true;
+      }
+    }
+
+    if (Array.isArray(msg.content)) {
+      const hasClosingTag = msg.content.some((item: any) => {
+        if (typeof item.text === 'string') {
+          return (
+            item.text.includes(':::') && item.text.lastIndexOf(':::') > item.text.indexOf(':::')
+          );
+        }
+        return false;
+      });
+      if (hasClosingTag) return true;
+    }
+
+    // Default to true if we can't determine (prevents blocking artifacts)
+    return true;
+  }
+
+  const fullyLoaded = isFullyLoadedMessage(message);
+
+  const _getFirstArtifactInChain = useCallback(
     (identifier: string) => {
       console.log('first artifact in chain called with identifier', identifier, _artifacts);
       if (!_artifacts) return { key: null, artifact: null };
@@ -153,23 +202,6 @@ export function Artifact({
     [_artifacts],
   );
 
-  // Helper: is the artifact update fully loaded?
-  function isFullyLoadedMessage(msg: any) {
-    if (!msg) return false;
-    if (typeof msg.content === 'string') {
-      // Heuristic: LLMs often end with ::: or similar marker
-      return msg.content.includes(':::') || msg.content.includes('END') || msg.content.length > 100;
-    }
-    if (Array.isArray(msg.content)) {
-      return msg.content.some(
-        (item: any) =>
-          typeof item.text === 'string' && (item.text.includes(':::') || item.text.includes('END')),
-      );
-    }
-    return false;
-  }
-
-  // Always use the most recent artifact in the chain for updates
   const updateArtifact = useCallback(() => {
     // Use extractNodes for robust extraction
     let content = extractContent(props.children);
@@ -213,390 +245,130 @@ export function Artifact({
 
     // Only merge if fully loaded, otherwise show raw/previous content
     let finalContent = content;
-    const fullyLoaded = isFullyLoadedMessage(message);
 
-    if (shouldUpdate && fullyLoaded) {
-      // Only merge when fully loaded
-      if (artifact && _artifacts && artifact.identifier) {
-        const isUpdatedArtifact = artifact.isUpdate;
-        let baseIdentifier = artifact.identifier;
-        if (isUpdatedArtifact) {
-          baseIdentifier = artifact.identifier.split('_')[0];
-        }
-        const baseArtifact = Object.values(_artifacts).find(
-          (a: any) => a.identifier && a.identifier.startsWith(baseIdentifier) && !a.isUpdate,
-        );
-        if (
-          baseArtifact &&
-          Object.keys(_artifacts).length !== 0 &&
-          artifact.content !== baseArtifact.content
-        ) {
-          finalContent = applyAllPartialUpdates(
-            baseArtifact.content ?? artifact.content ?? '',
-            _artifacts,
-            artifact.id,
-          );
-        }
-      }
-    }
-
-    // ...use finalContent for artifact creation/update...
-    // if (shouldUpdate && fullyLoaded) {
-    //   // Only merge when fully loaded
-    //   if (artifact && _artifacts && artifact.identifier) {
-    //     const isUpdatedArtifact = artifact.isUpdate;
-    //     let baseIdentifier = artifact.identifier;
-    //     if (isUpdatedArtifact) {
-    //       baseIdentifier = artifact.identifier.split('_')[0];
-    //     }
-    //     const baseArtifact = Object.values(_artifacts).find(
-    //       (a: any) => a.identifier && a.identifier.startsWith(baseIdentifier) && !a.isUpdate,
-    //     );
-    //     if (
-    //       baseArtifact &&
-    //       Object.keys(_artifacts).length !== 0 &&
-    //       artifact.content !== baseArtifact.content
-    //     ) {
-    //       finalContent = applyAllPartialUpdates(
-    //         baseArtifact.content ?? artifact.content ?? '',
-    //         _artifacts,
-    //         artifact.id,
-    //       );
-    //     }
-    //   }
-    // }
-
+    console.log('shouldUpdate', shouldUpdate);
     if (shouldUpdate) {
-      // Always ensure the base/original artifact is present in _artifacts
-      let baseArtifactKey: string | null = null;
-      let baseArtifact: Artifact | null = null;
-      const mostRecent = getFirstArtifactInChain(identifier);
-      if (mostRecent.key && mostRecent.artifact) {
-        baseArtifact = mostRecent.artifact;
-        baseArtifactKey = mostRecent.key;
-      } else {
-        // If not found, create and record a base artifact
-        baseArtifactKey = `${identifier}_${type}_${title}_${messageId}`
-          .replace(/\s+/g, '_')
-          .toLowerCase();
-        baseArtifact = {
-          id: baseArtifactKey,
-          identifier,
-          title,
-          type,
-          content: content, // Use the current content as the base
-          messageId,
-          index: 0,
-          lastUpdateTime: Date.now(),
-          isUpdate: false, // CRITICAL: Base artifact is NEVER an update
-        };
-        console.log('baseArtifact', baseArtifact);
-        setArtifacts((prevArtifacts) => ({
-          ...prevArtifacts,
-          [baseArtifactKey as string]: baseArtifact as Artifact,
-        }));
-      }
-
-      console.log('🔄 Processing artifact UPDATE for identifier:', identifier);
-      // CRITICAL: Use the currently selected artifact as the base for updates
-      // This allows chaining updates from any selected artifact (original or updated)
-      let existingArtifactKey: string | null = null;
-      console.log('identifier', identifier, _artifacts);
-      // Always use the most recent artifact in the chain for updates
-      const mostRecentUpdate = getFirstArtifactInChain(identifier);
-      console.log('most Recent', mostRecentUpdate);
-      if (mostRecentUpdate.key && mostRecentUpdate.artifact) {
-        baseArtifact = mostRecentUpdate.artifact;
-        existingArtifactKey = mostRecentUpdate.key;
-        console.log('🔄 [Artifact] Using most recent artifact in chain for update:', {
-          foundKey: existingArtifactKey,
-          title: baseArtifact?.title,
-          foundIdentifier: baseArtifact?.identifier,
-        });
-      } else {
-        existingArtifactKey = null;
-        baseArtifact = null;
-      }
-
-      console.log(
-        'existingArtifactKey:',
-        existingArtifactKey,
-        '_artifacts keys:',
-        Object.keys(_artifacts || {}),
-        'baseArtifact:',
-        baseArtifact,
+      // Find the existing original artifact with matching identifier
+      const existingArtifact = Object.values(_artifacts || {}).find(
+        (a) =>
+          a &&
+          typeof a.identifier === 'string' &&
+          (a.identifier === identifier || a.identifier.startsWith(identifier)),
       );
 
-      if (baseArtifact) {
-        const existingArtifact = baseArtifact;
-        console.log('baseArtifact', baseArtifact, artifact?.content);
-        console.log('✅ Found existing artifact to update:', existingArtifact.title);
-        console.log('🔒 Original artifact preserved:', {
-          id: existingArtifact.id,
-          title: existingArtifact.title,
-          contentLength: existingArtifact.content?.length,
-          lastUpdateTime: existingArtifact.lastUpdateTime,
-        });
-        let updateKey = `${props.identifier}_${props.type}_${props.title}_${messageId}`;
-        updateKey = updateKey.replace(/\s+/g, '_').toLowerCase();
-        console.log('Generated updateKey for artifact cache:', updateKey);
-        // Get comprehensive cache status for this artifact
-        const cacheStatus = artifactCache.getStatus(updateKey);
-        const cachedContent = artifactCache.getContent(updateKey);
-        const cachedSelection = artifactCache.getSelection(updateKey);
-        const cachedLocation = artifactCache.getUpdateLocation(updateKey);
+      console.log('🔍 Search result for existing artifact:', existingArtifact);
 
-        // console.log(
-        //   '🔍 [Artifact] Attempting to read cached selection for artifact:',
-        //   existingArtifact.id,
-        // );
-        console.log(
-          '📄 Cache status:',
-          cacheStatus,
-          'cache selection:',
-          cachedSelection,
-          'cache content',
-          cachedContent,
-          'cache location:',
-          cachedLocation,
+      if (existingArtifact) {
+
+        // CRITICAL: For chaining updates, use the MOST RECENT artifact (not the original base)
+        // This allows updates to build on previous updates
+        // Find all artifacts with this identifier
+        const allRelatedArtifacts = Object.values(_artifacts || {}).filter(
+          (a) =>
+            a &&
+            typeof a.identifier === 'string' &&
+            (a.identifier === identifier || a.identifier.startsWith(identifier)),
         );
 
-        // Debug: Add detailed artifact ID tracing
-        console.log('🔍 Artifact ID debugging:', {
-          existingArtifactId: existingArtifact.id,
-          existingArtifactKey: existingArtifactKey,
-          identifier: identifier,
-          messageId: messageId,
-          title: title,
-          type: type,
+        // Sort by lastUpdateTime descending (newest first)
+        allRelatedArtifacts.sort((a, b) => {
+          const timeA = a?.lastUpdateTime || 0;
+          const timeB = b?.lastUpdateTime || 0;
+          return timeB - timeA; // Descending - newest first
         });
 
-        const extractCodeBlocks = (markdown: string): string[] => {
-          const codeBlockRegex = /```(?:\w+)?\n?([\s\S]*?)```/g;
-          const matches: string[] = [];
-          let match;
-          while ((match = codeBlockRegex.exec(markdown)) !== null) {
-            matches.push(match[1].trim());
-          }
-          return matches;
-        };
+        // Use the most recent artifact as the base for this update
+        const mostRecentArtifact = allRelatedArtifacts[0] || existingArtifact;
+        const baseContent = mostRecentArtifact.content || '';
 
-        const codeBlocks = extractCodeBlocks(markdownContent);
-        console.log('codeBlocks', codeBlocks);
-        console.log('📝 Markdown content available:', {
-          hasMarkdown: markdownContent,
-          markdownLength: markdownContent.length,
-          codeBlocksFound: codeBlocks.length,
-          markdownPreview: markdownContent.substring(0, 200) + '...',
+        console.log('🔍 Using most recent artifact as base:', {
+          baseId: mostRecentArtifact.id,
+          baseIdentifier: mostRecentArtifact.identifier,
+          isUpdate: mostRecentArtifact.isUpdate,
+          baseContentLength: baseContent.length,
         });
 
-        // Only use code blocks or markdown for partial updates with valid selection context
-        const existingContentLength = existingArtifact?.content?.length || 0;
-
-        // Fix: Type narrowing for message and formatting for ternary
-        let isFullArtifactUpdate = false;
-        if (typeof message === 'string' && message) {
-          isFullArtifactUpdate = (message as string).includes(':::artifactupdate');
-        } else if (Array.isArray(message?.content)) {
-          isFullArtifactUpdate = message.content.some(
-            (item: any) =>
-              item.type === 'text' &&
-              typeof item.text === 'string' &&
-              item.text.includes(':::artifactupdate'),
-          );
-        }
-
-        let isFullElement = false;
-        // Check if content is a full HTML, React, or Mermaid element
-        if (typeof content === 'string') {
-          const trimmed = content.trim();
-          // Simple checks for full HTML, React, or Mermaid blocks
-          isFullElement =
-            /^<([a-zA-Z]+)([^<]+)*(?:>(.*)<\/\1>|\s+\/>)$/.test(trimmed) || // HTML/React JSX
-            trimmed.startsWith('<div') ||
-            trimmed.startsWith('<section') ||
-            trimmed.startsWith('<main') ||
-            trimmed.startsWith('<html') ||
-            trimmed.startsWith('<body') ||
-            trimmed.startsWith('<Mermaid') ||
-            trimmed.startsWith('graph ') ||
-            trimmed.startsWith('sequenceDiagram') ||
-            trimmed.startsWith('stateDiagram') ||
-            trimmed.startsWith('classDiagram') ||
-            trimmed.startsWith('erDiagram') ||
-            trimmed.startsWith('flowchart');
-        }
-        // If not a full element, treat as update
-        const isPartialUpdate = !isFullElement;
-        console.log('isFullElement', isFullElement, isPartialUpdate);
-
-        console.log('🔍 Enhanced update analysis:', {
-          isFullArtifactUpdate,
-          isPartialUpdate,
-          newContentLength: existingArtifact?.content?.length,
-          existingContentLength,
-          cachedSelection: cachedSelection,
-          content: content,
-          hasCodeBlocks: codeBlocks.length,
-          hasValidCachedContent: cacheStatus.contentValid,
-          hasValidSelection: cacheStatus.selectionValid,
-          existingArtifactcontent: existingArtifact.content,
+        // Apply the partial update using cached selection context
+        console.log('🔍 Calling applyPartialUpdate with:', {
+          baseContentLength: baseContent.length,
+          newContentLength: content.length,
+          artifactId: existingArtifact.id, // Use original artifact ID for cache lookup
+          updateIndex: 0,
         });
 
-        // If we have valid cached selection context and this doesn't look like a full replacement
-        if (!isFullArtifactUpdate && isPartialUpdate && cachedSelection) {
-          const baseContent = cachedContent?.content || existingArtifact.content || '';
-          console.log('baseContent', baseContent);
-          finalContent = applyAllPartialUpdates(baseContent, _artifacts, existingArtifact.id);
-          console.log('finalContent after applyPartialUpdate:', finalContent);
-          // if (artifact) {
-          //   artifact.content = finalContent;
-          // }
-        } else if (codeBlocks.length > 0) {
-          console.log('codeBlocks', codeBlocks);
-          // If we have a code block, always use it as the new content for the update
-          finalContent = codeBlocks[0];
-        } else {
-          console.log('📄 Using full content replacement - caching full content', finalContent);
-          finalContent = content;
-        }
+        // Apply the partial update to the MOST RECENT content (not original base)
+        finalContent = applyPartialUpdate(
+          baseContent, // Content from most recent artifact
+          content, // NEW content from LLM
+          existingArtifact.id, // Original artifact ID for cache lookup
+          0,
+          _artifacts || undefined,
+        );
 
-        // Only cache the final content if this was a full update
-        const currentUpdateLocation = artifactCache.getUpdateLocation(existingArtifact.id);
-        const shouldCacheContent =
-          !currentUpdateLocation || currentUpdateLocation.updateType === 'full';
-        console.log('shouldCacheContent', shouldCacheContent);
-        if (shouldCacheContent) {
-          console.log('💾 Caching final content for full update');
-          artifactCache.setContent(existingArtifact.id, finalContent, {
-            title: title,
-            type: type,
-            identifier: identifier,
-            source: 'directive',
-          });
-          console.log('💾 Cached final content for full update');
-        } else {
-          console.log('🚫 Skipping content cache for partial update');
-        }
+        console.log('🔍 After applyPartialUpdate, finalContent length:', finalContent.length);
+        console.log('🔍 finalContent preview:', finalContent.substring(0, 200));
 
-        // CREATE SEPARATE UPDATED ARTIFACT: Keep original + create new updated version
-        console.log('🔄 [Artifact] Creating separate updated artifact alongside original');
+        // Create a new update artifact with incremented index
+        const relatedUpdates = Object.values(_artifacts || {}).filter(
+          (a) =>
+            a &&
+            a.identifier === existingArtifact.identifier &&
+            a.messageId === messageId &&
+            a.isUpdate,
+        );
+        const newUpdateIndex = relatedUpdates.length;
 
-        let updatedIdentifier = `${props.identifier}_${props.type}_${props.title}_${messageId}`;
-        updatedIdentifier = updatedIdentifier.toLowerCase().replace(/\s+/g, '_');
-        console.log('updatedIdentifier', updatedIdentifier);
-        const baseTitle = existingArtifact.title;
-        const updatedTitle = `${baseTitle}`;
+        const updateArtifactKey =
+          `${existingArtifact.identifier}_update${newUpdateIndex}_${type}_${title}_${messageId}`
+            .replace(/\s+/g, '_')
+            .toLowerCase();
 
-        // Use identifier as key for updated artifacts
-        const updatedArtifact: Artifact = {
-          ...existingArtifact,
-          id: updatedIdentifier, // id and identifier are the same for updated artifacts
-          identifier: updatedIdentifier,
-          title: updatedTitle,
-          content: finalContent,
+        console.log('🔍 Creating new update artifact with key:', updateArtifactKey);
+
+        const updateArtifact: Artifact = {
+          id: updateArtifactKey,
+          identifier: existingArtifact.identifier,
+          title: existingArtifact.title,
+          type: existingArtifact.type,
+          content: finalContent, // Store the merged content
+          messageId,
+          index: newUpdateIndex,
           lastUpdateTime: Date.now(),
-          isUpdate: true,
+          isUpdate: true, // Mark as an update artifact
         };
 
-        console.log('updatedArtifact', updatedArtifact);
-
-        // CRITICAL: Migrate selection cache from original artifact to new updated artifact
-        // This ensures applyPartialUpdate can find the selection context when merging
-        const originalSelection = artifactCache.getSelection(existingArtifact.id);
-        if (originalSelection) {
-          console.log('🔄 Migrating selection cache from original to updated artifact:', {
-            from: existingArtifact.id,
-            to: updatedIdentifier,
-            selection: originalSelection,
-            oldText: originalSelection.originalText,
-            newText: finalContent,
+        console.log('🔍 Update artifact created:', {
+          id: updateArtifact.id,
+          identifier: updateArtifact.identifier,
+          isUpdate: updateArtifact.isUpdate,
+          contentLength: updateArtifact.content?.length || 0,
+          contentPreview: updateArtifact.content?.substring(0, 100) || '',
           });
 
-          // Copy the selection context to the new updated artifact
-          // IMPORTANT: Update the originalText to the NEW content from the LLM
-          artifactCache.setSelection(updatedIdentifier, {
-            ...originalSelection,
-            updatedText: finalContent, // Store the updated text
-            artifactId: updatedIdentifier,
-            artifactMessageId: messageId,
-          });
-
-          // Also cache the content for the updated artifact
-          artifactCache.setContent(updatedIdentifier, finalContent, {
-            title: updatedTitle,
-            type: type,
-            identifier: updatedIdentifier,
-            source: 'directive',
-          });
-
-          console.log('✅ Selection cache migrated with NEW content:', {
-            originalTextPreview: originalSelection.originalText.substring(0, 50),
-            newTextPreview: finalContent.substring(0, 50),
-            cachedForArtifact: updatedIdentifier,
-          });
-        } else {
-          console.log('⚠️ No selection cache found for original artifact:', existingArtifact.id);
-          const allSelectionEntries = Array.from(artifactCache._selectionCache.entries());
-          const selectionEntryValue = allSelectionEntries.find(
-            ([_, details]) => details.fileKey === existingArtifact.id,
-          );
-
-          if (selectionEntryValue) {
-            const selectionEntry = selectionEntryValue[1];
-            console.log('cachedSelection from parent/original artifact', selectionEntry);
-            artifactCache.setSelection(updatedIdentifier, {
-              ...selectionEntry,
-              updatedText: finalContent, // Store the updated text
-              artifactId: updatedIdentifier,
-              artifactMessageId: messageId,
-            });
-            artifactCache.setContent(updatedIdentifier, finalContent, {
-              title: updatedTitle,
-              type: type,
-              identifier: updatedIdentifier,
-              source: 'directive',
-            });
-          }
-        }
-
+        // Set the update artifact in the state
+        throttledUpdateRef.current(() => {
+          console.log('🔍 Setting artifacts state with new update artifact');
         setArtifacts((prevArtifacts) => {
-          // CHANGED: Do NOT update the base artifact during streaming
-          // Keep base artifact unchanged, only save the update artifact
-          // On refresh, ArtifactTabs will reconstruct by applying all updates
-
-          console.log('💾 [Artifact] Saving update artifact (base unchanged):', {
-            baseId: existingArtifact.id,
-            updateId: updatedIdentifier,
-            updateContentLength: finalContent?.length,
+            const updated = {
+              ...prevArtifacts,
+              [updateArtifactKey]: updateArtifact,
+            };
+            console.log('🔍 Updated artifacts state:', Object.keys(updated));
+            return updated;
           });
 
-          return {
-            ...prevArtifacts,
-            // Base artifact stays UNCHANGED
-            [existingArtifact.id]: existingArtifact,
-            // Save the new update artifact
-            [updatedIdentifier]: updatedArtifact,
-          };
+          setArtifact(updateArtifact);
+          setCurrentArtifactId(updateArtifact.id);
+
+          // CRITICAL: Auto-open artifacts panel when update is applied
+          setArtifactsVisible(true);
+
+          console.log('✅ [Artifact] Setting local artifact state for update:', {
+            artifactId: updateArtifact.id,
+            identifier: updateArtifact.identifier,
+            isUpdate: updateArtifact.isUpdate,
+          });
         });
-
-        setVisibleArtifacts((prevVisible) => ({
-          ...prevVisible,
-          [existingArtifact.id]: existingArtifact,
-          [updatedIdentifier]: updatedArtifact,
-        }));
-
-        setArtifact(updatedArtifact);
-
-        // Auto-select the updated artifact so it displays immediately
-        setCurrentArtifactId(updatedIdentifier);
-        console.log('✅ Auto-selected updated artifact:', updatedIdentifier);
-
-        // Also persist the updated artifact to the message text for refresh persistence
-
-        setTimeout(() => {
-          setRefreshTrigger((prev) => prev + 1);
-        }, 100);
         return;
       } else {
         console.log('⚠️ No existing artifact found for identifier:', identifier);
@@ -644,36 +416,46 @@ export function Artifact({
       setArtifacts((prevArtifacts) => {
         if (
           prevArtifacts?.[artifactKey] != null &&
-          prevArtifacts[artifactKey]?.content === content
+          (prevArtifacts[artifactKey]?.content?.length || 0) > content.length
         ) {
-          return prevArtifacts;
+          console.log(
+            '⚠️ Skipping artifact update - cached artifact is longer and still streaming',
+          );
+          return prevArtifacts; // Don't update if cached is longer
         }
-
-        return {
+        const updated = {
           ...prevArtifacts,
           [artifactKey]: currentArtifact,
         };
+        return updated;
       });
-
       setArtifact(currentArtifact);
       setCurrentArtifactId(currentArtifact.id);
+
+      // CRITICAL: Auto-open artifacts panel when new artifact is created
+      setArtifactsVisible(true);
+
+      console.log('✅ [Artifact] Setting local artifact state for regular creation:', {
+        artifactId: currentArtifact.id,
+        identifier: currentArtifact.identifier,
+        title: currentArtifact.title,
+      });
     });
   }, [
     artifact,
+    message,
     props.children,
     props.title,
     props.type,
     props.identifier,
-    message,
     isArtifactUpdateNode,
     messageId,
     _artifacts,
-    getFirstArtifactInChain,
     setArtifacts,
-    setVisibleArtifacts,
     setCurrentArtifactId,
-    setRefreshTrigger,
     location.pathname,
+    setArtifactsVisible,
+    fullyLoaded,
   ]);
 
   // Add this ref at the top-level of the component, not inside useEffect
@@ -757,22 +539,48 @@ export function Artifact({
     const hasContent = content && content.trim() !== '';
     const shouldProcess = isArtifactUpdateNode || hasContent;
 
-    // For artifact updates, always process if content has changed (even if empty initially)
-    // This allows continuous merging as content streams in
-    if (
+
+    // CRITICAL: For artifact updates, trigger on any content change
+    // But use throttling inside updateArtifact to prevent excessive processing
+    const shouldUpdate =
       shouldProcess &&
-      (lastUpdateKey.current !== updateKey ||
+      (isArtifactUpdateNode
+        ? lastContent.current !== content // For updates: trigger on ANY content change (throttled in updateArtifact)
+        : lastUpdateKey.current !== updateKey || // For regular: trigger on key/content/message change
         lastContent.current !== content ||
-        lastProcessedMessageId.current !== messageId)
-    ) {
+          lastProcessedMessageId.current !== messageId);
+
+    if (shouldUpdate) {
       lastUpdateKey.current = updateKey;
       lastContent.current = content;
       lastProcessedMessageId.current = messageId;
+      console.log(
+        'resetting counter and updating artifact',
+        updateKey,
+        'hasContent:',
+        hasContent,
+        'isUpdate:',
+        isArtifactUpdateNode,
+        'content length:',
+        content.length,
+        _currentArtifactId,
+      );
       resetCounter();
       updateArtifact();
     } else if (!_currentArtifactId && hasContent) {
       // If no artifact is selected (e.g. on refresh), select this one (but only if it has content)
       setCurrentArtifactId(artifact?.id ?? null);
+    } else {
+      console.log(
+        'skipping updateArtifact - shouldUpdate:',
+        shouldUpdate,
+        'shouldProcess:',
+        shouldProcess,
+        'hasContent:',
+        hasContent,
+        'isUpdate:',
+        isArtifactUpdateNode,
+      );
     }
   }, [
     props.identifier,
