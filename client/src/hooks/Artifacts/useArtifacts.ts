@@ -61,6 +61,47 @@ export default function useArtifacts() {
     }
   }, [conversationId]);
 
+  // CRITICAL: Hydrate artifacts with cached content on initial load/refresh
+  useEffect(() => {
+    if (!artifacts || Object.keys(artifacts).length === 0) {
+      return;
+    }
+
+    console.log('🔄 [useArtifacts] Checking for cached content to hydrate artifacts');
+    
+    // Check if any artifact has cached content that should be applied
+    let hasUpdates = false;
+    const updatedArtifacts = { ...artifacts };
+
+    Object.keys(artifacts).forEach((artifactId) => {
+      const artifact = artifacts[artifactId];
+      if (!artifact) return;
+      
+      const cachedContent = artifactCache.getContent(artifactId);
+      
+      if (cachedContent && cachedContent.content !== artifact.content) {
+        console.log('💾 [useArtifacts] Hydrating artifact from cache:', {
+          artifactId,
+          cachedLength: cachedContent.content.length,
+          currentLength: artifact.content?.length,
+        });
+        
+        updatedArtifacts[artifactId] = {
+          ...artifact,
+          id: artifact.id || artifactId,
+          content: cachedContent.content,
+        };
+        hasUpdates = true;
+      }
+    });
+
+    if (hasUpdates) {
+      console.log('✅ [useArtifacts] Applying cached content to artifacts');
+      setArtifacts(updatedArtifacts);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]); // Only run on conversationId change (initial load/refresh)
+
   const orderedArtifactIds = useMemo(() => {
     return Object.keys(artifacts ?? {}).sort(
       (a, b) => (artifacts?.[a]?.lastUpdateTime ?? 0) - (artifacts?.[b]?.lastUpdateTime ?? 0),

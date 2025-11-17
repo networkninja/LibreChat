@@ -25,8 +25,8 @@ export function applyPartialUpdate(
   console.log('applyPartialUpdate', updateContent, artifactId);
   const allSelectionValues = Array.from(artifactCache._selectionCache.values());
   const allSelectionEntries = Array.from(artifactCache._selectionCache.entries());
-  //const selectionValuesDb = artifactCache._selectionCache.get(artifactId);
-
+  const selectionValuesDb = artifactCache._selectionCache.get(artifactId);
+  
   // Strategy 1: Try cached selection context for this artifact first
   let cachedSelection = artifactCache.getSelection(artifactId);
   console.log('cachedSelection from artifactId', cachedSelection, allSelectionEntries.length);
@@ -99,7 +99,7 @@ export function applyPartialUpdate(
       originalLength: originalContent.length,
       updateLength: updateContent.length,
       ratio: updateRatio,
-      preview: updateContent.substring(0, 100)
+      preview: updateContent.substring(0, 100),
     });
     return updateContent;
   }
@@ -130,12 +130,12 @@ export function applyPartialUpdate(
 
   if (startLine === endLine) {
     // Single-line selection: replace only the substring
-    //const line = lines[startLine] || '';
-    // const before = line.slice(0, startColumn);
-    // const after = line.slice(endColumn);
-    // //console.log("updateContent artifactutlis", updateContent, after);
-    lines[startLine] = updateContent;
-    //console.log("lines after single line update artifactutls", lines);
+    const line = lines[startLine] || '';
+    const before = line.slice(0, startColumn);
+    const after = line.slice(endColumn);
+    console.log("updateContent artifactutlis", updateContent, "before:", before, "after:", after);
+    lines[startLine] = before + updateContent + after;
+    console.log("lines after single line update artifactutls", lines[startLine]);
     return lines.join('\n');
   } else {
     // Multi-line selection: replace partial start/end lines and all lines in between
@@ -143,10 +143,19 @@ export function applyPartialUpdate(
     const afterEnd = lines[endLine]?.slice(endColumn) || '';
     const before = lines.slice(0, startLine);
     const after = lines.slice(endLine + 1);
+    
+    // CRITICAL: Check if start/end are at line boundaries (full line selection)
+    // If startColumn is 0 and endColumn is at end of line, don't add prefix/suffix
+    const isFullLineSelection =
+      startColumn === 0 && (afterEnd.trim() === '' || endColumn === (lines[endLine]?.length || 0));
+    
     let mergedUpdateLines: string[] = [];
-    // console.log("updateLines", updateLines);
-    // console.log("beforeStart", beforeStart, "afterEnd", afterEnd);
-    if (updateLines.length === 1) {
+
+    if (isFullLineSelection) {
+      // Full line selection - just use the update content as-is
+      console.log('Full line selection detected - using update content directly', updateLines);
+      mergedUpdateLines = updateLines;
+    } else if (updateLines.length === 1) {
       // Single update line replaces the whole region
       mergedUpdateLines = [updateLines[0]];
     } else if (updateLines.length === 2) {
@@ -192,6 +201,7 @@ export function applyAllPartialUpdates(
 
       console.log('🔍 Checking artifact for update:', {
         identifier: a?.identifier,
+        id: a?.id,
         isUpdate: _isUpdate,
         isMarkedAsUpdate: a?.isUpdate,
         isWithinTimeRange: _isWithinTimeRange,
@@ -230,11 +240,35 @@ export function applyAllPartialUpdates(
     if (newContent !== mergedContent) {
       console.log('✅ Content changed, updating mergedContent');
       mergedContent = newContent;
-      artifactCache.setContent(updateArtifact.id, mergedContent);
+
+      // Also save to the original artifact ID for easier lookup on refresh
+      if (updateArtifact.originalIdentifier) {
+        artifactCache.setContent(updateArtifact.originalIdentifier, mergedContent, {
+          title: updateArtifact.title,
+          type: updateArtifact.type,
+          identifier: updateArtifact.originalIdentifier,
+          source: 'directive',
+        });
+      }
     } else {
       console.log('⏭️  Content unchanged, skipping');
     }
     count++;
+  }
+  
+  // CRITICAL: Save final merged content to cache for the target artifact
+  if (targetArtifactId && mergedContent !== originalContent) {
+    const targetArtifact = artifacts[targetArtifactId];
+    console.log("target Artifact before saving to cache", targetArtifact);
+    if (targetArtifact) {
+      artifactCache.setContent(targetArtifactId, mergedContent, {
+        title: targetArtifact.title,
+        type: targetArtifact.type,
+        identifier: targetArtifact.identifier,
+        source: 'directive',
+      });
+      console.log('💾 Saved final merged content to cache for:', targetArtifactId);
+    }
   }
   return mergedContent;
 }
