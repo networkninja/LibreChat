@@ -61,6 +61,13 @@ export const artifactsState = atom<Record<string, Artifact | undefined> | null>(
   ] as const,
 });
 
+// Atom to trigger artifact refresh/re-merge
+// Used to force re-computation of merged content when needed
+export const artifactRefreshTriggerState = atom<number>({
+  key: 'artifactRefreshTrigger',
+  default: 0,
+});
+
 const CURRENT_ARTIFACT_ID_STORAGE_KEY = 'librechat-current-artifact-id';
 const CONVERSATION_ID_STORAGE_KEY = 'librechat-conversation-id';
 
@@ -126,7 +133,7 @@ export const currentArtifactId = atom<string | null>({
 
 export const artifactsVisibility = atom<boolean>({
   key: 'artifactsVisibility',
-  default: true,
+  default: false,
   effects: [
     ({ onSet, node }) => {
       onSet(async (newValue) => {

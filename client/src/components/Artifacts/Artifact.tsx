@@ -8,15 +8,10 @@ import type { Artifact } from '~/common';
 import { useMessageContext, useArtifactContext } from '~/Providers';
 import { logger, extractContent, isArtifactRoute } from '~/utils';
 import { artifactsState } from '~/store/artifacts';
-import { extractNodes, extractContent } from '~/utils';
 import ArtifactButton from './ArtifactButton';
-import { artifactCache } from './ArtifactCache';
-import store from '~/store';
-import { applyPartialUpdate } from '~/hooks/Artifacts/useArtifactUtlis';
-import { artifactRefreshTriggerState } from '~/hooks/Artifacts/useArtifacts';
 import { artifactCache } from './artifactCache';
 import store from '~/store';
-import { applyAllPartialUpdates } from '~/hooks/Artifacts/useArtifactUtlis';
+import { applyPartialUpdate } from '~/hooks/Artifacts/useArtifactUtlis';
 import { artifactRefreshTriggerState } from '~/hooks/Artifacts/useArtifacts';
 
 export const artifactPlugin: Pluggable = () => {
@@ -556,6 +551,17 @@ export function Artifact({
       lastUpdateKey.current = updateKey;
       lastContent.current = content;
       lastProcessedMessageId.current = messageId;
+      console.log(
+        'resetting counter and updating artifact',
+        updateKey,
+        'hasContent:',
+        hasContent,
+        'isUpdate:',
+        isArtifactUpdateNode,
+        'content length:',
+        content.length,
+        _currentArtifactId,
+      );
       resetCounter();
       updateArtifact();
     } else if (!_currentArtifactId && hasContent) {
