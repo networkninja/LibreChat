@@ -19,7 +19,7 @@ const OpenAIClient = require('~/app/clients/OpenAIClient');
 const getLogStores = require('~/cache/getLogStores');
 
 const thinkingModelsRegex =
- /^(anthropic-)?claude-(3\.7|4([.-]\d+)?-(sonnet|opus)(-latest)?|sonnet-4(-\d{8})?)$|^groq-deepseek-r1-distill-llama-70b$/;
+  /^(anthropic-)?claude-(3\.7|4([.-]\d+)?-(sonnet|opus)(-latest)?|sonnet-4(-\d{8})?)$|^groq-deepseek-r1-distill-llama-70b$/;
 
 const { PROXY } = process.env;
 

@@ -25,6 +25,10 @@ export enum PermissionTypes {
    */
   MULTI_CONVO = 'MULTI_CONVO',
   /**
+   * Type for Defaulting to Last Model Used Permissions
+   */
+  DEFAULT_LAST_MODEL = 'DEFAULT_LAST_MODEL',
+  /**
    * Type for Temporary Chat
    */
   TEMPORARY_CHAT = 'TEMPORARY_CHAT',
@@ -107,6 +111,11 @@ export const multiConvoPermissionsSchema = z.object({
 });
 export type TMultiConvoPermissions = z.infer<typeof multiConvoPermissionsSchema>;
 
+export const defaultLastModelPermissionsSchema = z.object({
+  [Permissions.USE]: z.boolean().default(true),
+});
+export type TdefaultLastModelPermissions = z.infer<typeof defaultLastModelPermissionsSchema>;
+
 export const temporaryChatPermissionsSchema = z.object({
   [Permissions.USE]: z.boolean().default(true),
 });
@@ -151,6 +160,7 @@ export const permissionsSchema = z.object({
   [PermissionTypes.MEMORIES]: memoryPermissionsSchema,
   [PermissionTypes.AGENTS]: agentPermissionsSchema,
   [PermissionTypes.MULTI_CONVO]: multiConvoPermissionsSchema,
+  [PermissionTypes.DEFAULT_LAST_MODEL]: defaultLastModelPermissionsSchema,
   [PermissionTypes.TEMPORARY_CHAT]: temporaryChatPermissionsSchema,
   [PermissionTypes.RUN_CODE]: runCodePermissionsSchema,
   [PermissionTypes.WEB_SEARCH]: webSearchPermissionsSchema,
