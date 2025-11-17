@@ -44,6 +44,17 @@ export default function ArtifactTabs({
     if (!stateArtifact || !_artifacts) {
       return stateArtifact;
     }
+    
+    // CRITICAL: Check cache FIRST before recomputing
+    const cachedContent = artifactCache.getContent(stateArtifact.id);
+    if (cachedContent && cachedContent.content) {
+      console.log('💾 [ArtifactTabs] Using cached content for:', stateArtifact.id);
+      return {
+        ...stateArtifact,
+        content: cachedContent.content,
+      };
+    }
+    
     //if (!latestMessage?.content || !latestMessage.messageId) return;
     // If this is an update artifact, we need to merge all updates up to this point
     if (stateArtifact.isUpdate) {
@@ -214,15 +225,15 @@ When providing your updated code, use the artifactupdate directive format:
 \`\`\`
 :::
 
-IMPORTANT: 
-- Use the exact identifier "${artifact.identifier || artifact.id}" from the existing artifact
-- Only include the portion of code that should replace the selected section, not the entire artifact, DO NOT SEND BACK WHOLE ARTIFACT
-- Make sure to look at the whole artifact from the previous message to understand the update context but only send the section that is updated back and make sure to keep all formatting to not break the artifact.
-- Do not include any explanations before the artifactupdate directive or comments before the ::artifactupdate marker
-- Keep spacing and everything from the artifact so it can be inserted correctly into the artifact
-- Do not add any code that already exists in the artifact
-- Make sure to test your changes before submitting.
-- Never ask the user a question, just pick an answer and change it.
+CRITICAL RULES (follow in this order):
+1. IDENTIFIER: Use ${artifact.identifier || artifact.id} exactly as-is
+2. SCOPE: Return ONLY the code section being changed, NEVER the full artifact
+3. CONTEXT: Read entire previous artifact to understand change location, then output only updates
+4. NO EXPLANATIONS: Zero preamble text before ::artifactupdate marker
+5. PRESERVE FORMATTING: Match original spacing, indentation, line breaks exactly
+6. NO DUPLICATION: Only include code being modified; never repeat existing unchanged code
+7. INSERTION READY: Format output so it's directly replaceable at the specified location
+8. ASSUME YES: Make decisions without asking user confirmation
 `
         : // General instructions for other types of requests
           `
@@ -232,7 +243,18 @@ You are helping with code. If you want to provide updated code that should repla
 \`\`\`${getLanguageFromType(artifact.type)}
 [your updated code here]
 \`\`\`
-:::`;
+:::
+
+CRITICAL RULES (follow in this order):
+1. IDENTIFIER: Use ${artifact.identifier || artifact.id} exactly as-is
+2. SCOPE: Return ONLY the code section being changed, NEVER the full artifact
+3. CONTEXT: Read entire previous artifact to understand change location, then output only updates
+4. NO EXPLANATIONS: Zero preamble text before ::artifactupdate marker
+5. PRESERVE FORMATTING: Match original spacing, indentation, line breaks exactly
+6. NO DUPLICATION: Only include code being modified; never repeat existing unchanged code
+7. INSERTION READY: Format output so it's directly replaceable at the specified location
+8. ASSUME YES: Make decisions without asking user confirmation
+`;
 
       submitMessage({
         text: messageData.message,
