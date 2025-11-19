@@ -27,6 +27,7 @@ export default function Artifacts() {
 
   const {
     activeTab,
+    isMermaid,
     setActiveTab,
     currentIndex,
     cycleArtifact,

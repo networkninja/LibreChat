@@ -22,10 +22,12 @@ import {
 
 export default function ArtifactTabs({
   artifact,
+  isMermaid,
   editorRef,
   previewRef,
 }: {
   artifact: Artifact;
+  isMermaid: boolean;
   editorRef: React.MutableRefObject<CodeEditorRef>;
   previewRef: React.MutableRefObject<SandpackPreviewRef>;
 }) {
@@ -215,8 +217,7 @@ export default function ArtifactTabs({
     (messageData: any) => {
       const isUpdateRequest = messageData.isArtifactUpdate === true;
 
-      const systemInstructions = isUpdateRequest
-        ? `You are helping edit code in an artifact. 
+      const systemInstructions = `You are helping edit code in an artifact. 
 When providing your updated code, use the artifactupdate directive format:
 
 :::artifactupdate{identifier="${artifact.identifier}" type="${artifact.type || 'text/html'}" title="${artifact.title || 'Updated Artifact'}"}
@@ -234,26 +235,7 @@ CRITICAL RULES (follow in this order):
 6. NO DUPLICATION: Only include code being modified; never repeat existing unchanged code
 7. INSERTION READY: Format output so it's directly replaceable at the specified location
 8. ASSUME YES: Make decisions without asking user confirmation
-`
-        : // General instructions for other types of requests
-          `
-You are helping with code. If you want to provide updated code that should replace the original section, use the artifactupdate directive format:
-
-:::artifactupdate{identifier="${artifact.identifier}" type="${artifact.type || 'text/html'}" title="${artifact.title || 'Updated Artifact'}"}
-\`\`\`${getLanguageFromType(artifact.type)}
-[your updated code here]
-\`\`\`
-:::
-
-CRITICAL RULES (follow in this order):
-1. IDENTIFIER: Use ${artifact.identifier || artifact.id} exactly as-is
-2. SCOPE: Return ONLY the code section being changed, NEVER the full artifact
-3. CONTEXT: Read entire previous artifact to understand change location, then output only updates
-4. NO EXPLANATIONS: Zero preamble text before ::artifactupdate marker
-5. PRESERVE FORMATTING: Match original spacing, indentation, line breaks exactly
-6. NO DUPLICATION: Only include code being modified; never repeat existing unchanged code
-7. INSERTION READY: Format output so it's directly replaceable at the specified location
-8. ASSUME YES: Make decisions without asking user confirmation
+9. VALIDATION: Ensure updates align logically with user request and artifact type
 `;
 
       submitMessage({
@@ -297,7 +279,7 @@ CRITICAL RULES (follow in this order):
         value="preview"
         className={cn('flex-grow overflow-auto', isMermaid ? 'bg-[#282C34]' : 'bg-white')}
         key={`preview-${previewKey}`}
-       tabIndex={-1}>
+      >
         <ArtifactPreview
           files={files}
           fileKey={fileKey}

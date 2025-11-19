@@ -258,7 +258,6 @@ export function Artifact({
       console.log('🔍 Search result for existing artifact:', existingArtifact);
 
       if (existingArtifact) {
-
         // CRITICAL: For chaining updates, use the MOST RECENT artifact (not the original base)
         // This allows updates to build on previous updates
         // Find all artifacts with this identifier
@@ -342,12 +341,12 @@ export function Artifact({
           isUpdate: updateArtifact.isUpdate,
           contentLength: updateArtifact.content?.length || 0,
           contentPreview: updateArtifact.content?.substring(0, 100) || '',
-          });
+        });
 
         // Set the update artifact in the state
         throttledUpdateRef.current(() => {
           console.log('🔍 Setting artifacts state with new update artifact');
-        setArtifacts((prevArtifacts) => {
+          setArtifacts((prevArtifacts) => {
             const updated = {
               ...prevArtifacts,
               [updateArtifactKey]: updateArtifact,
@@ -538,7 +537,6 @@ export function Artifact({
     const hasContent = content && content.trim() !== '';
     const shouldProcess = isArtifactUpdateNode || hasContent;
 
-
     // CRITICAL: For artifact updates, trigger on any content change
     // But use throttling inside updateArtifact to prevent excessive processing
     const shouldUpdate =
@@ -546,24 +544,13 @@ export function Artifact({
       (isArtifactUpdateNode
         ? lastContent.current !== content // For updates: trigger on ANY content change (throttled in updateArtifact)
         : lastUpdateKey.current !== updateKey || // For regular: trigger on key/content/message change
-        lastContent.current !== content ||
+          lastContent.current !== content ||
           lastProcessedMessageId.current !== messageId);
 
     if (shouldUpdate) {
       lastUpdateKey.current = updateKey;
       lastContent.current = content;
       lastProcessedMessageId.current = messageId;
-      console.log(
-        'resetting counter and updating artifact',
-        updateKey,
-        'hasContent:',
-        hasContent,
-        'isUpdate:',
-        isArtifactUpdateNode,
-        'content length:',
-        content.length,
-        _currentArtifactId,
-      );
       resetCounter();
       updateArtifact();
     } else if (!_currentArtifactId && hasContent) {

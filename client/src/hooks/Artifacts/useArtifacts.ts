@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Constants } from 'librechat-data-provider';
 import { useRecoilState, useResetRecoilState } from 'recoil';
 import { logger } from '~/utils';
-import { useArtifactsContext } from '~/Providers';
+import { useArtifactContext } from '~/Providers';
 import { getKey } from '~/utils/artifacts';
 import store from '~/store';
 import { artifactCache } from '~/components/Artifacts/ArtifactCache';
@@ -67,8 +67,6 @@ export default function useArtifacts() {
       return;
     }
 
-    console.log('🔄 [useArtifacts] Checking for cached content to hydrate artifacts');
-    
     // Check if any artifact has cached content that should be applied
     let hasUpdates = false;
     const updatedArtifacts = { ...artifacts };
@@ -76,16 +74,16 @@ export default function useArtifacts() {
     Object.keys(artifacts).forEach((artifactId) => {
       const artifact = artifacts[artifactId];
       if (!artifact) return;
-      
+
       const cachedContent = artifactCache.getContent(artifactId);
-      
+
       if (cachedContent && cachedContent.content !== artifact.content) {
         console.log('💾 [useArtifacts] Hydrating artifact from cache:', {
           artifactId,
           cachedLength: cachedContent.content.length,
           currentLength: artifact.content?.length,
         });
-        
+
         updatedArtifacts[artifactId] = {
           ...artifact,
           id: artifact.id || artifactId,
@@ -359,6 +357,7 @@ export default function useArtifacts() {
 
   return {
     activeTab,
+    isMermaid,
     setActiveTab,
     currentIndex,
     cycleArtifact,
