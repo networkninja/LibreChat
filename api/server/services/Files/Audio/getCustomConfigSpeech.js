@@ -50,10 +50,14 @@ async function getCustomConfigSpeech(req, res) {
       }
     }
 
-    if (speechTab.textToSpeech) {
-      for (const key in speechTab.textToSpeech) {
-        if (speechTab.textToSpeech[key] !== undefined) {
-          settings[key] = speechTab.textToSpeech[key];
+    if (speechTab.textToSpeech !== undefined) {
+      if (typeof speechTab.textToSpeech === 'boolean') {
+        settings.textToSpeech = speechTab.textToSpeech;
+      } else {
+        for (const key in speechTab.textToSpeech) {
+          if (speechTab.textToSpeech[key] !== undefined) {
+            settings[key] = speechTab.textToSpeech[key];
+          }
         }
       }
     }
