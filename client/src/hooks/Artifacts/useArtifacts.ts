@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Constants } from 'librechat-data-provider';
 import { useRecoilState, useResetRecoilState } from 'recoil';
 import { logger } from '~/utils';
-import { useArtifactContext } from '~/Providers';
+import { useArtifactsContext } from '~/Providers';
 import { getKey } from '~/utils/artifacts';
 import store from '~/store';
 import { artifactCache } from '~/components/Artifacts/ArtifactCache';

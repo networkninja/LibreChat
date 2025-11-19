@@ -453,7 +453,6 @@ export function Artifact({
     setCurrentArtifactId,
     location.pathname,
     setArtifactsVisible,
-    fullyLoaded,
   ]);
 
   // Add this ref at the top-level of the component, not inside useEffect
