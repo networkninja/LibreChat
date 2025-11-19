@@ -204,7 +204,62 @@ export default function ArtifactTabs({
   }
   const contentRef = useRef<HTMLDivElement>(null);
   useAutoScroll({ ref: contentRef, content, isSubmitting });
-  const { files, fileKey, template, sharedProps } = useArtifactProps({ artifact });
+
+  // Helper function to get language from artifact type
+  const getLanguageFromType = (type?: string): string => {
+    if (type === 'code/javascript') return 'javascript';
+    if (type === 'text/html') return 'html';
+    return 'text';
+  };
+
+  // Handle selection submissions from the CodeEditor component
+  const handleSelectionSubmit = useCallback(
+    (messageData: any) => {
+      const isUpdateRequest = messageData.isArtifactUpdate === true;
+
+      const systemInstructions = `You are helping edit code in an artifact. 
+When providing your updated code, use the artifactupdate directive format:
+
+:::artifactupdate{identifier="${artifact.identifier}" type="${artifact.type || 'text/html'}" title="${artifact.title || 'Updated Artifact'}"}
+\`\`\`${getLanguageFromType(artifact.type)}
+[your updated code here]
+\`\`\`
+:::
+
+CRITICAL RULES (follow in this order):
+1. IDENTIFIER: Use ${artifact.identifier || artifact.id} exactly as-is
+2. SCOPE: Return ONLY the code section being changed, NEVER the full artifact
+3. CONTEXT: Read entire previous artifact to understand change location, then output only updates
+4. NO EXPLANATIONS: Zero preamble text before ::artifactupdate marker
+5. PRESERVE FORMATTING: Match original spacing, indentation, line breaks exactly
+6. NO DUPLICATION: Only include code being modified; never repeat existing unchanged code
+7. INSERTION READY: Format output so it's directly replaceable at the specified location
+8. ASSUME YES: Make decisions without asking user confirmation
+9. VALIDATION: Ensure updates align logically with user request and artifact type
+`;
+
+      submitMessage({
+        text: messageData.message,
+        artifactInfo: {
+          artifactId: artifact.id,
+          artifactType: artifact.type ?? '',
+        },
+        systemInstructions,
+      });
+    },
+    [artifact, submitMessage],
+  );
+
+  // --- Auto-select preview tab when artifact changes ---
+  const [tabValue, setTabValue] = useState('preview');
+  const hasInitialized = useRef(false);
+  useEffect(() => {
+    if (!hasInitialized.current && artifact.id) {
+      setTabValue('preview');
+      hasInitialized.current = true;
+    }
+  }, [artifact.id]);
+
   return (
     <>
       <Tabs.Content value="code" id="artifacts-code" className={cn('flex-grow overflow-auto')}>
