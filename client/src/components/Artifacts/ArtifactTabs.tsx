@@ -74,23 +74,19 @@ export default function ArtifactTabs({
       // Return raw artifact content during streaming - no merge, no cache
       return finalArtifact;
     }
-    
-    // CRITICAL: Check cache FIRST before recomputing
-    const cachedContent = artifactCache.getContent(stateArtifact.id);
-    if (cachedContent && cachedContent.content) {
-      console.log('💾 [ArtifactTabs] Using cached content for:', stateArtifact.id);
-      return {
-        ...stateArtifact,
-        content: cachedContent.content,
-      };
+
+    if (!finalArtifact || !_artifacts) {
+      console.log('⚠️ [mergedArtifact] No finalArtifact or _artifacts');
+      return finalArtifact;
     }
-    
+
     //if (!latestMessage?.content || !latestMessage.messageId) return;
     // If this is an update artifact, we need to merge all updates up to this point
-    if (stateArtifact.isUpdate) {
-      // Extract the base identifier from the artifact's identifier
-      // Format is usually: baseId_type_title_messageId
-      const baseIdentifier = stateArtifact.identifier?.split('_')[0];
+    if (finalArtifact.isUpdate) {
+      // Don't split it - just use it directly (splitting would break identifiers with underscores)
+      const baseIdentifier = finalArtifact.identifier;
+      const currentUpdateIndex =
+        finalArtifact.index ?? parseInt(finalArtifact.id?.match(/_update(\d+)_/)?.[1] || '0', 10);
 
       // Get all artifacts with same identifier, sorted by index/time
       const relatedArtifacts = _artifacts
@@ -385,33 +381,14 @@ When providing your updated code, use the artifactupdate directive format:
 
 CRITICAL RULES (follow in this order):
 1. IDENTIFIER: Use ${artifact.identifier || artifact.id} exactly as-is
-2. SCOPE: Return ONLY the code section being changed, NEVER the full artifact
+2. SCOPE: Return ONLY the code section being changed, NEVER the full artifact OR ANY OTHER CODE. It is replacing the existing content in the artifact. ** NO EXTRA CODE!**
 3. CONTEXT: Read entire previous artifact to understand change location, then output only updates
 4. NO EXPLANATIONS: Zero preamble text before ::artifactupdate marker
 5. PRESERVE FORMATTING: Match original spacing, indentation, line breaks exactly
 6. NO DUPLICATION: Only include code being modified; never repeat existing unchanged code
 7. INSERTION READY: Format output so it's directly replaceable at the specified location
 8. ASSUME YES: Make decisions without asking user confirmation
-`
-        : // General instructions for other types of requests
-          `
-You are helping with code. If you want to provide updated code that should replace the original section, use the artifactupdate directive format:
-
-:::artifactupdate{identifier="${artifact.identifier}" type="${artifact.type || 'text/html'}" title="${artifact.title || 'Updated Artifact'}"}
-\`\`\`${getLanguageFromType(artifact.type)}
-[your updated code here]
-\`\`\`
-:::
-
-CRITICAL RULES (follow in this order):
-1. IDENTIFIER: Use ${artifact.identifier || artifact.id} exactly as-is
-2. SCOPE: Return ONLY the code section being changed, NEVER the full artifact
-3. CONTEXT: Read entire previous artifact to understand change location, then output only updates
-4. NO EXPLANATIONS: Zero preamble text before ::artifactupdate marker
-5. PRESERVE FORMATTING: Match original spacing, indentation, line breaks exactly
-6. NO DUPLICATION: Only include code being modified; never repeat existing unchanged code
-7. INSERTION READY: Format output so it's directly replaceable at the specified location
-8. ASSUME YES: Make decisions without asking user confirmation
+9. VALIDATION: Ensure updates align logically with user request and artifact type
 `;
 
       submitMessage({
@@ -452,7 +429,7 @@ CRITICAL RULES (follow in this order):
           artifact={displayArtifact}
           editorRef={editorRef}
           sharedProps={sharedProps}
-        readOnly={isSharedConvo}
+          readOnly={isSharedConvo}
           onSelectionSubmit={handleSelectionSubmit}
         />
       </Tabs.Content>
