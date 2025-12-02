@@ -47,11 +47,11 @@ export function BrowserTTS({
     }
   }, [audioRef, isSpeaking, playbackRate, messageId]);
 
-  logger.log(
-    'MessageAudio: audioRef.current?.src, audioRef.current',
-    audioRef.current?.src,
-    audioRef.current,
-  );
+  // logger.log(
+  //   'MessageAudio: audioRef.current?.src, audioRef.current',
+  //   audioRef.current?.src,
+  //   audioRef.current,
+  // );
 
   const handleClick = () => {
     if (audioRef.current) {
@@ -140,11 +140,11 @@ export function ExternalTTS({
     }
   }, [audioRef, isSpeaking, playbackRate, messageId]);
 
-  logger.log(
-    'MessageAudio: audioRef.current?.src, audioRef.current',
-    audioRef.current?.src,
-    audioRef.current,
-  );
+  // logger.log(
+  //   'MessageAudio: audioRef.current?.src, audioRef.current',
+  //   audioRef.current?.src,
+  //   audioRef.current,
+  // );
 
   return (
     <>

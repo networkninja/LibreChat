@@ -17,8 +17,6 @@ import { useLocalize } from '~/hooks';
 import { artifactCache } from './ArtifactCache';
 import { useRecoilValue } from 'recoil';
 import { artifactsState } from '~/store/artifacts';
-// Export the centralized artifact cache
-export { artifactCache } from './ArtifactCache';
 
 const createDebouncedMutation = (
   callback: (params: {
@@ -51,12 +49,14 @@ const CodeEditor = ({
   artifact,
   editorRef,
   onSelectionSubmit,
+  conversationId,
 }: {
   fileKey: string;
   readOnly?: boolean;
   artifact: Artifact;
   editorRef: React.MutableRefObject<CodeEditorRef>;
   onSelectionSubmit?: (message: any) => void;
+  conversationId?: string;
 }) => {
   const { sandpack } = useSandpack();
   const [currentUpdate, setCurrentUpdate] = useState<string | null>(null);
@@ -69,11 +69,8 @@ const CodeEditor = ({
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const localize = useLocalize();
-  const [lastEditSource, setLastEditSource] = useState<
-    'external' | 'undo' | 'redo' | 'user' | null
-  >(null);
-  const [isLocallyEdited, setIsLocallyEdited] = useState(false);
-  const [lastArtifactId, setLastArtifactId] = useState<string | null>(artifact.id ?? null);
+  const [_lastEditSource, _setLastEditSource] = useState<'external' | 'undo' | 'redo' | null>(null);
+  const [_isLocallyEdited, _setIsLocallyEdited] = useState(false);
   const allArtifacts = useRecoilValue(artifactsState);
 
   // Local ref to track current selection info
@@ -118,6 +115,8 @@ const CodeEditor = ({
     onSuccess: () => {
       setIsMutating(false);
       setCurrentUpdate(null);
+      // Don't clear cache immediately - let Artifact.tsx handle it after processing updates
+      // This prevents race conditions where the cache is cleared before ::artifactupdate is processed
     },
     onError: () => {
       setIsMutating(false);
@@ -163,56 +162,23 @@ const CodeEditor = ({
 
   // ...inside CodeEditor component, before return...
 
-  // Undo/Redo stack for code editor content
-  const [codeUndoStack, setCodeUndoStack] = useState<string[]>([]);
-  const [codeRedoStack, setCodeRedoStack] = useState<string[]>([]);
+// Undo/Redo stack for code editor content
+  const [_codeUndoStack, _setCodeUndoStack] = useState<string[]>([]);
+  const [_codeRedoStack, _setCodeRedoStack] = useState<string[]>([]);
 
-  // Helper to get the artifact chain (sorted by lastUpdateTime)
-  function getArtifactChain() {
-    if (!allArtifacts || !artifact.identifier) return [];
-    return Object.values(allArtifacts)
-      .filter((a) => a?.identifier === artifact.identifier)
-      .sort((a, b) => (a?.lastUpdateTime ?? 0) - (b?.lastUpdateTime ?? 0));
-  }
-
-  function getCurrentArtifactIndex(chain: Artifact[]) {
-    return chain.findIndex((a) => a.id === artifact.id);
-  }
-
-  function handleUndoArtifact() {
-    const chain = getArtifactChain();
-    const idx = getCurrentArtifactIndex(chain.filter((a): a is Artifact => a !== undefined));
-    if (idx > 0) {
-      const prev = chain[idx - 1];
-      setCurrentCode(prev?.content);
-      sandpack.updateFile('/' + fileKey, prev?.content);
-      // Optionally, update artifact selection in your global state
-    }
-  }
-
-  function handleRedoArtifact() {
-    const chain = getArtifactChain();
-    const idx = getCurrentArtifactIndex(chain.filter((a): a is Artifact => a !== undefined));
-    if (idx < chain.length - 1) {
-      const next = chain[idx + 1];
-      setCurrentCode(next?.content);
-      sandpack.updateFile('/' + fileKey, next?.content);
-      // Optionally, update artifact selection in your global state
-    }
-  }
-
-  const handleEditorChange = useCallback(
+  // Note: handleEditorChange is not currently used but kept for potential future use
+  // Sandpack's file changes are now tracked via the useEffect below
+  const _handleEditorChange = useCallback(
     (code: string) => {
       // Only push to undo stack if the code actually changed
-      setCodeUndoStack((prev) =>
+      _setCodeUndoStack((prev) =>
         prev.length === 0 || prev[prev.length - 1] !== code ? [...prev, code] : prev,
       );
-      setCodeRedoStack([]); // Clear redo stack on new input
+      _setCodeRedoStack([]); // Clear redo stack on new input
       setCurrentCode(code);
       sandpack.updateFile('/' + fileKey, code);
-      setIsLocallyEdited(true);
-      setLastEditSource('user');
-
+      _setIsLocallyEdited(true);
+      // setLastEditSource('user'); // Commented out - 'user' is not a valid value
       // Clear the selection cache when user manually edits the artifact
       // This prevents stale cached selections from being used in subsequent updates
       if (artifact?.id) {
@@ -225,6 +191,13 @@ const CodeEditor = ({
     },
     [setCurrentCode, sandpack, fileKey, artifact?.id],
   );
+
+  // useEffect(() => {
+  //   if (isLocallyEdited) {
+  //     const timeout = setTimeout(() => setIsLocallyEdited(false), 30000); // 30 seconds
+  //     return () => clearTimeout(timeout);
+  //   }
+  // }, [isLocallyEdited]);
 
   // Handle selection changes
   useEffect(() => {
@@ -369,33 +342,71 @@ const CodeEditor = ({
             endColumn,
           };
 
-          // Prevent redundant updates and infinite loops
-          // const lastSelection = selectionInfoRef.current;
-          // const isSameSelection =
-          //   lastSelection &&
-          //   lastSelection.text === newSelectionInfo.text &&
-          //   lastSelection.startLine === newSelectionInfo.startLine &&
-          //   lastSelection.endLine === newSelectionInfo.endLine;
-
           // if (!isSameSelection) {
           setSelectionInfo(newSelectionInfo);
           console.log('setSSelectionInfo', artifact.id, newSelectionInfo);
-          // selectionInfoRef.current = newSelectionInfo;
-          // setCurrentSelection(selectedText);
-          // setShowSelectionTooltip(true);
-          // Only cache if changed
+
+          // CRITICAL VALIDATION: Verify that the calculated coordinates actually match the selected text
+          // This prevents saving incorrect coordinates that will break the merge
+          let extractedText = '';
+          if (startLine === endLine) {
+            // Single line selection
+            extractedText = lines[startLine]?.slice(startColumn, endColumn) || '';
+          } else {
+            // Multi-line selection
+            const firstLinePart = lines[startLine]?.slice(startColumn) || '';
+            const lastLinePart = lines[endLine]?.slice(0, endColumn) || '';
+            const middleLines = lines.slice(startLine + 1, endLine);
+            extractedText = [firstLinePart, ...middleLines, lastLinePart].join('\n');
+          }
+
+          const coordinatesAreValid = extractedText === selectedText;
+
+          console.log('🔍 [VALIDATION] Selection coordinate check:', {
+            selectedText: selectedText.substring(0, 100),
+            extractedText: extractedText.substring(0, 100),
+            coordinatesAreValid,
+            startLine,
+            endLine,
+            startColumn,
+            endColumn,
+            lineContent: lines[startLine],
+          });
+
+          if (!coordinatesAreValid) {
+            console.error(
+              '❌ [VALIDATION FAILED] Calculated coordinates do not match selected text!',
+              {
+                selectedText,
+                extractedText,
+                mismatch: true,
+                WILL_NOT_CACHE: true,
+              },
+            );
+            // Don't save invalid coordinates - this would break merging!
+            return;
+          }
+
+          // Only cache if validation passed
           if (artifact?.id) {
-            artifactCache.setSelection(artifact.id.toLowerCase(), {
-              fileKey,
-              originalText: selectedText,
-              startLine,
-              endLine,
-              startColumn,
-              endColumn,
-              artifactId: artifact.id.toLowerCase(),
-              artifactIndex: artifact.index,
-              artifactMessageId: artifact.messageId?.toLowerCase(),
-            });
+            artifactCache.setSelection(
+              artifact.id.toLowerCase(),
+              {
+                fileKey,
+                originalText: selectedText,
+                startLine,
+                endLine,
+                startColumn,
+                endColumn,
+                artifactId: artifact.id.toLowerCase(),
+                artifactIndex: artifact.index,
+                artifactMessageId: artifact.messageId?.toLowerCase(),
+              },
+              {
+                conversationId: conversationId || undefined,
+                messageId: artifact.messageId || undefined,
+              },
+            );
           }
 
           // Also update the ref for immediate access
@@ -430,7 +441,7 @@ const CodeEditor = ({
       document.removeEventListener('keyup', handleSelectionChange);
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [artifact.id, artifact.index, artifact.messageId, fileKey, sandpack.files]);
+  }, [artifact.id, artifact.index, artifact.messageId, conversationId, fileKey, sandpack.files]);
 
   // Function to submit selected text to the LLM with a prompt
   const submitToLLM = useCallback(
@@ -446,6 +457,33 @@ const CodeEditor = ({
 ${currentSelection}
 \`\`\``;
 
+      const existingUpdates = allArtifacts
+        ? Object.values(allArtifacts).filter(
+            (a) => a && a.isUpdate && a.identifier === artifact.identifier,
+          )
+        : [];
+      const updateIndex = existingUpdates.length;
+
+      console.log('🔑 [ArtifactCodeEditor] Calculating updateIndex:', {
+        identifier: artifact.identifier,
+        existingUpdatesCount: existingUpdates.length,
+        calculatedIndex: updateIndex,
+      });
+
+      // CRITICAL: DO NOT include timestamp or messageId in the key!
+      // The key must match what Artifact.tsx generates when processing the LLM response
+      // Artifact.tsx will use the ASSISTANT's messageId, which we don't have yet
+      // Format: identifier_updateN_type_title
+      const updateArtifactKey =
+        `${artifact.identifier}_update${updateIndex}_${artifact.type}_${artifact.title}`
+          .replace(/\s+/g, '_')
+          .toLowerCase();
+
+      // console.log('🔑 [ArtifactCodeEditor] Generated key:', {
+      //   updateArtifactKey,
+      //   willMatchInArtifactTsx: true,
+      // });
+
       // Create selection context
       const context = {
         fileKey,
@@ -454,27 +492,31 @@ ${currentSelection}
         endLine: selectionInfo.endLine,
         startColumn: selectionInfo.startColumn,
         endColumn: selectionInfo.endColumn,
-        artifactId: artifact.id,
+        artifactId: updateArtifactKey,
         artifactIndex: artifact.index,
         artifactMessageId: artifact.messageId,
         timestamp: Date.now(),
       };
 
       // Cache the selection context if this is an update request
-      if (isUpdate && artifact.id) {
-        console.log('setSelection', artifact.id, context);
+      if (isUpdate && updateArtifactKey) {
+        console.log('setSelection', updateArtifactKey, context);
         // Use the centralized artifact cache instead of local cache
-        artifactCache.setSelection(artifact.id, context);
-        console.log(
-          '🟢 [ArtifactCodeEditor] Cached selection context for artifact:',
-          artifact.id,
+        // CRITICAL: Pass conversationId and messageId for database persistence
+        artifactCache.setSelection(updateArtifactKey, context, {
+          conversationId: conversationId || undefined,
+          messageId: artifact.messageId || undefined,
+        });
+        console.log('🟢 [ArtifactCodeEditor] Cached selection context for artifact:', {
+          artifactId: artifact.id,
+          conversationId,
           context,
-        );
+        });
 
         // Also cache the selected content with line information using the enhanced cache
         if (currentSelection && selectionInfo) {
           artifactCache.setContentWithLines(
-            artifact.id,
+            updateArtifactKey,
             currentSelection,
             {
               startLine: selectionInfo.startLine,
@@ -515,7 +557,20 @@ ${currentSelection}
 
       logger.log('artifacts', 'Submitted selection to LLM for editing');
     },
-    [currentSelection, artifact, onSelectionSubmit, selectionInfo, fileKey],
+    [
+      currentSelection,
+      onSelectionSubmit,
+      selectionInfo,
+      artifact.type,
+      artifact.identifier,
+      artifact.title,
+      artifact.index,
+      artifact.messageId,
+      artifact.id,
+      allArtifacts,
+      fileKey,
+      conversationId,
+    ],
   );
 
   // Function to handle custom prompt submission
@@ -538,35 +593,36 @@ ${currentSelection}
     }
   }, [currentSelection]);
 
-  // Listen to Sandpack file changes and trigger handleEditorChange
-  useEffect(() => {
-    const currentCode = (sandpack.files['/' + fileKey] as SandpackBundlerFile | undefined)?.code;
-
-    if (currentCode && currentCode !== artifact.content && lastEditSource !== 'user') {
-      handleEditorChange(currentCode);
-    }
-  }, [sandpack.files, fileKey, artifact.content, lastEditSource, handleEditorChange]);
+  // Track file changes and trigger mutation only for user edits
+  // Uses a ref to track the last known content to avoid triggering on programmatic updates
+  const lastKnownContentRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (readOnly) {
-      return;
-    }
-    if (isMutating) {
-      return;
-    }
-    if (artifact.index == null) {
+    if (readOnly || isMutating || artifact.index == null || !artifact.content) {
       return;
     }
 
     const currentCode = (sandpack.files['/' + fileKey] as SandpackBundlerFile | undefined)?.code;
-    const isNotOriginal =
-      currentCode && artifact.content != null && currentCode.trim() !== artifact.content.trim();
+
+    // Initialize the ref on first render
+    if (lastKnownContentRef.current === null) {
+      lastKnownContentRef.current = currentCode || '';
+      return;
+    }
+
+    // Only proceed if the content actually changed
+    if (currentCode === lastKnownContentRef.current) {
+      return;
+    }
+
+    // Update the ref
+    lastKnownContentRef.current = currentCode || '';
+
+    const isNotOriginal = currentCode && currentCode.trim() !== artifact.content.trim();
     const isNotRepeated =
-      currentUpdate == null
-        ? true
-        : currentCode != null && currentCode.trim() !== currentUpdate.trim();
+      currentUpdate == null || (currentCode != null && currentCode.trim() !== currentUpdate.trim());
 
-    if (artifact.content && isNotOriginal && isNotRepeated) {
+    if (isNotOriginal && isNotRepeated) {
       setCurrentCode(currentCode);
       debouncedMutation({
         index: artifact.index,
@@ -575,10 +631,6 @@ ${currentSelection}
         updated: currentCode,
       });
     }
-
-    return () => {
-      debouncedMutation.cancel();
-    };
   }, [
     fileKey,
     artifact.index,
@@ -587,7 +639,6 @@ ${currentSelection}
     readOnly,
     isMutating,
     currentUpdate,
-    setIsMutating,
     sandpack.files,
     setCurrentCode,
     debouncedMutation,
@@ -595,6 +646,28 @@ ${currentSelection}
 
   return (
     <div ref={editorContainerRef} className="relative">
+      {/* Undo/Redo buttons at the top */}
+      {/* <div className="mb-2 flex gap-2">
+        <button
+          onClick={handleUndoArtifact}
+          disabled={getCurrentArtifactIndex(getArtifactChain()) <= 0}
+          className="rounded bg-gray-700 px-3 py-1 text-xs text-gray-300 hover:bg-gray-600 disabled:opacity-50"
+        >
+          Undo
+        </button>
+        <button
+          onClick={handleRedoArtifact}
+          disabled={
+            (() => {
+              const chain = getArtifactChain();
+              return getCurrentArtifactIndex(chain) === -1 || getCurrentArtifactIndex(chain) >= chain.length - 1;
+            })()
+          }
+          className="rounded bg-gray-700 px-3 py-1 text-xs text-gray-300 hover:bg-gray-600 disabled:opacity-50"
+        >
+          Redo
+        </button>
+      </div> */}
       <SandpackCodeEditor
         ref={editorRef}
         showTabs={false}
@@ -727,10 +800,9 @@ export const ArtifactCodeEditor = function ({
     }
     return {
       ...sharedOptions,
-      activeFile: '/' + fileKey,
       bundlerURL: template === 'static' ? config.staticBundlerURL : config.bundlerURL,
     };
-  }, [config, template, fileKey]);
+  }, [config, template]);
   const [readOnly, setReadOnly] = useState(isSubmitting ?? false);
   useEffect(() => {
     setReadOnly(isSubmitting ?? false);
@@ -740,9 +812,9 @@ export const ArtifactCodeEditor = function ({
     return null;
   }
 
-  // Always use the display artifact (merged/cached if available)
-  const displayArtifact =
-    artifactCache.getDisplayArtifact(artifact?.id, { [artifact?.id]: artifact }) || artifact;
+  // CRITICAL: Use the artifact prop directly - it's already the displayArtifact
+  // from ArtifactTabs.tsx which calls getDisplayArtifact with full _artifacts
+  // No need to call getDisplayArtifact again here with incomplete context
 
   return (
     <StyledProvider
@@ -757,7 +829,7 @@ export const ArtifactCodeEditor = function ({
     >
       <CodeEditor
         fileKey={fileKey}
-        artifact={displayArtifact}
+        artifact={artifact}
         editorRef={editorRef}
         readOnly={readOnly}
         onSelectionSubmit={onSelectionSubmit}
@@ -765,3 +837,6 @@ export const ArtifactCodeEditor = function ({
     </StyledProvider>
   );
 };
+
+// Export the centralized artifact cache
+export { artifactCache } from './ArtifactCache';

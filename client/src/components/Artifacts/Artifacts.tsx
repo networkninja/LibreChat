@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { useSetRecoilState } from 'recoil';
+import { useRecoilState } from 'recoil';
 import * as Tabs from '@radix-ui/react-tabs';
 import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, X } from 'lucide-react';
 import type { SandpackPreviewRef, CodeEditorRef } from '@codesandbox/sandpack-react';
@@ -16,14 +16,15 @@ export default function Artifacts() {
   const { isMutating } = useEditorContext();
   const editorRef = useRef<CodeEditorRef>();
   const previewRef = useRef<SandpackPreviewRef>();
-  const [isVisible, setIsVisible] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const setArtifactsVisible = useSetRecoilState(store.artifactsVisibility);
+  const [artifactsVisible, setArtifactsVisible] = useRecoilState(store.artifactsVisibility);
+  const [isVisible, setIsVisible] = useState(artifactsVisible);
 
+  // Sync local isVisible state with Recoil artifactsVisibility state
   useEffect(() => {
-    setIsVisible(true);
-  }, []);
+    setIsVisible(artifactsVisible);
+  }, [artifactsVisible]);
 
   const {
     activeTab,
@@ -62,6 +63,7 @@ export default function Artifacts() {
 
   const closeArtifacts = () => {
     setIsVisible(false);
+    console.log('visibleArtifacts before set 2:');
     setTimeout(() => setArtifactsVisible(false), 300);
   };
 

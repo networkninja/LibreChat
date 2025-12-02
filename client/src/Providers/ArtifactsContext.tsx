@@ -12,6 +12,8 @@ interface ArtifactsContextValue {
   latestMessageId: string | null;
   latestMessageText: string;
   conversationId: string | null;
+  isMessageStreaming: boolean;
+  latestMessage: TMessage | null;
 }
 
 const ArtifactsContext = createContext<ArtifactsContextValue | undefined>(undefined);
@@ -110,6 +112,15 @@ export function ArtifactsProvider({ children }: { children: React.ReactNode }) {
     } as TMessage);
   }, [latestMessage?.messageId, latestMessage?.text, latestMessage?.content]);
 
+  // Detect if the latest message is still streaming
+  const isMessageStreaming = useMemo(() => {
+    if (!latestMessage) return false;
+    console.log('latestMessage unfinished status:', latestMessage);
+    // A message is streaming ONLY if explicitly marked as unfinished
+    // Don't check finish_reason - it may be undefined for cached/complete messages
+    return latestMessage.unfinished === true;
+  }, [latestMessage]);
+
   /** Context value only created when relevant values change */
   const contextValue = useMemo<ArtifactsContextValue>(
     () => ({
@@ -117,8 +128,16 @@ export function ArtifactsProvider({ children }: { children: React.ReactNode }) {
       latestMessageText,
       latestMessageId: latestMessage?.messageId ?? null,
       conversationId: conversation?.conversationId ?? null,
+      isMessageStreaming,
+      latestMessage: latestMessage ?? null,
     }),
-    [isSubmitting, latestMessage?.messageId, latestMessageText, conversation?.conversationId],
+    [
+      isSubmitting,
+      latestMessage,
+      latestMessageText,
+      conversation?.conversationId,
+      isMessageStreaming,
+    ],
   );
 
   return <ArtifactsContext.Provider value={contextValue}>{children}</ArtifactsContext.Provider>;

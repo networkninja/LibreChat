@@ -25,8 +25,8 @@ async function getCustomConfigSpeech(req, res) {
       });
     }
 
-    const sttExternal = !!customConfig.speech?.stt;
-    const ttsExternal = !!customConfig.speech?.tts;
+    const sttExternal = !!appConfig.speech?.stt;
+    const ttsExternal = !!appConfig.speech?.tts;
     let settings = {
       sttExternal,
       ttsExternal,

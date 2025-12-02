@@ -903,10 +903,15 @@ class AgentClient extends BaseClient {
           .join('\n')
           .trim();
 
+        const extraSystemInstructions = this.options.req.body.extraSystemInstructions;
+
+        console.log('during run agent', this.options.req.body.extraSystemInstructions);
+
         let systemContent = [
           systemMessage,
           agent.instructions ?? '',
           i !== 0 ? (agent.additional_instructions ?? '') : '',
+          extraSystemInstructions ?? '',
         ]
           .join('\n')
           .trim();

@@ -10,12 +10,14 @@ export interface Artifact {
   index?: number;
   messageId?: string;
   identifier?: string;
+  originalIdentifier?: string;
   language?: string;
   content?: string;
   title?: string;
   type?: string;
   updatedContent?: string;
   isUpdate?: boolean;
+  isMerged?: boolean;
 }
 
 export interface SelectionRange {
