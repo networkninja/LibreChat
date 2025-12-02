@@ -31,7 +31,7 @@ export default function ModelPanel({
   const model = useWatch({ control, name: 'model' });
   const providerOption = useWatch({ control, name: 'provider' });
   const modelParameters = useWatch({ control, name: 'model_parameters' });
-  
+
   const thinkingModelsRegex = useMemo(
     () =>
       /^(anthropic-)?claude-(3\.7|4([.-]\d+)?-(sonnet|opus)(-latest)?|sonnet-4(-\d{8})?)$|^groq-deepseek-r1-distill-llama-70b$/,
@@ -80,7 +80,7 @@ export default function ModelPanel({
 
   const parameters = useMemo((): SettingDefinition[] => {
     console.log('provider', provider, model, thinkingModelsRegex.test(model ?? ''));
-    
+
     // Override provider to 'anthropic' for thinking models from NNI Models
     let providerCheck = provider;
     let endpointTypeCheck = endpointType;
@@ -92,7 +92,10 @@ export default function ModelPanel({
     }
 
     const customParams = endpointsConfig[providerCheck]?.customParams ?? {};
-    const [combinedKey, endpointKey] = getSettingsKeys(endpointTypeCheck ?? providerCheck, model ?? '');
+    const [combinedKey, endpointKey] = getSettingsKeys(
+      endpointTypeCheck ?? providerCheck,
+      model ?? '',
+    );
     const overriddenEndpointKey = customParams.defaultParamsEndpoint ?? endpointKey;
     const defaultParams =
       agentParamSettings[combinedKey] ?? agentParamSettings[overriddenEndpointKey] ?? [];
@@ -252,7 +255,7 @@ export default function ModelPanel({
             {/* Below is an example of an applied dynamic setting, each be contained by a div with the column span specified */}
             {parameters.map((setting) => {
               const Component = componentMapping[setting.component];
-              console.log("Rendering setting:", setting);
+              console.log('Rendering setting:', setting);
               if (!Component) {
                 return null;
               }

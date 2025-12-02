@@ -95,6 +95,7 @@ export default function useSubmitMessage() {
       if (!data) {
         return console.warn('No data provided to submitMessage');
       }
+      console.log('here??????', data.text);
       let messageText = typeof data.text === 'string' ? data.text : data.text.message;
       const selectionContext =
         typeof data.text === 'object' ? data.text.selectionContext : undefined;

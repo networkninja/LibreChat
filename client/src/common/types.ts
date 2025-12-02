@@ -1,5 +1,5 @@
 import { RefObject } from 'react';
-import { Constants, FileSources, EModelEndpoint } from 'librechat-data-provider';
+import { FileSources, EModelEndpoint } from 'librechat-data-provider';
 import type { UseMutationResult } from '@tanstack/react-query';
 import type * as InputNumberPrimitive from 'rc-input-number';
 import type { SetterOrUpdater, RecoilState } from 'recoil';
@@ -8,9 +8,6 @@ import type * as t from 'librechat-data-provider';
 import type { LucideIcon } from 'lucide-react';
 import type { TranslationKeys } from '~/hooks';
 
-export function isEphemeralAgent(agentId: string | null | undefined): boolean {
-  return agentId == null || agentId === '' || agentId === Constants.EPHEMERAL_AGENT_ID;
-}
 export interface ConfigFieldDetail {
   title: string;
   description: string;
@@ -368,6 +365,9 @@ export type artifactSectionUpdate = {
   fileKey?: string;
   originalText?: string;
   updateText?: string;
+  artifactId?: string | null;
+  artifactIndex?: number | null;
+  artifactMessageId?: string | null;
 };
 
 export type TOptions = {

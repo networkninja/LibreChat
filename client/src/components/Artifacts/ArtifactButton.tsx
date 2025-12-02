@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import debounce from 'lodash/debounce';
 import { useLocation } from 'react-router-dom';
-import { useRecoilState, useSetRecoilState, useResetRecoilState } from 'recoil';
+import { useRecoilState, useSetRecoilState } from 'recoil';
 import type { Artifact } from '~/common';
 import FilePreview from '~/components/Chat/Input/Files/FilePreview';
 import { cn, getFileType, logger, isArtifactRoute } from '~/utils';
@@ -18,12 +18,29 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
   const isSelected = artifact?.id === currentArtifactId;
   const [visibleArtifacts, setVisibleArtifacts] = useRecoilState(store.visibleArtifacts);
 
+  // Get current conversation ID from URL
+  const currentConversationId = location.pathname.match(/\/c\/([^/]+)/)?.[1] || null;
+
   const debouncedSetVisibleRef = useRef(
     debounce(
       (artifactToSet: Artifact, currentVisible: Record<string, Artifact | undefined> | null) => {
         // Guard: Only update if the artifact is not already visible or has changed
+        console.log("existingArtifact:", currentVisible, artifactToSet);
         if (currentVisible) {
           const existingArtifact = currentVisible[artifactToSet.id];
+          console.log(
+            'existingArtifact content:',
+            existingArtifact?.content,
+            artifactToSet.content,
+          );
+          // if (existingArtifact && existingArtifact.content === artifactToSet.content) {
+          //   console.log(
+          //     'artifacts_visibility',
+          //     'Skipping update - artifact already visible with same content',
+          //     artifactToSet.id,
+          //   );
+          //   return;
+          // }
         }
 
         console.log(
@@ -36,7 +53,7 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
           [artifactToSet.id]: artifactToSet,
         }));
       },
-      750,
+      100,
     ),
   );
 
@@ -72,6 +89,23 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
             return;
           }
           console.log('[ArtifactButton] Clicked:', { id: artifact.id, title: artifact.title });
+
+          // CRITICAL: Check if this artifact belongs to the current conversation
+          // Artifacts are stored per-conversation, so clicking artifacts from other chats won't work
+          const artifactExistsInCurrentConversation = _artifacts?.[artifact.id] != null;
+
+          if (!artifactExistsInCurrentConversation) {
+            console.warn('⚠️ [ArtifactButton] Artifact does not belong to current conversation:', {
+              artifactId: artifact.id,
+              currentConversationId,
+              artifactInState: !!_artifacts?.[artifact.id],
+              message:
+                'This artifact belongs to a different conversation. Switch to that conversation to view it.',
+            });
+            // Don't open the artifact - it's not in the current conversation's state
+            return;
+          }
+
           setCurrentArtifactId(artifact.id);
           setVisible(true);
 

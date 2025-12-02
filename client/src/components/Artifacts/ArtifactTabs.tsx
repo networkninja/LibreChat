@@ -228,6 +228,8 @@ export default function ArtifactTabs({
   const initializeCache = useCallback(
     async (artifactId: string) => {
       if (artifactId && !cacheInitialized) {
+        console.log('🔄 [ArtifactTabs] Initializing cache for artifact:', artifactId);
+
         try {
           // Load artifact-specific cache from database
           await artifactCache.initWithDatabase(artifactId);
@@ -247,6 +249,7 @@ export default function ArtifactTabs({
       setCurrentCode(undefined);
       initializeCache(artifact.id);
     }
+    console.log('artifact.id', artifact.id, 'lastIdRef.current', lastIdRef.current);
     lastIdRef.current = artifact.id;
   }, [setCurrentCode, artifact.id, initializeCache]);
 
@@ -290,6 +293,21 @@ export default function ArtifactTabs({
         );
       }
       if (originalArtifact && originalArtifact.content) {
+        // console.log(
+        //   '🟡🟡🟡 [CALL SITE 3: ArtifactTabs.tsx Line ~315] CALLING applyAllPartialUpdates:',
+        //   {
+        //     location: 'ArtifactTabs.tsx line ~315 - Update Artifact Display',
+        //     reason: 'Displaying update artifact with merged content',
+        //     baseArtifactId: originalArtifact.id,
+        //     targetArtifactId: artifact.id,
+        //     baseContentLength: originalArtifact.content.length,
+        //     allArtifactsCount: _artifacts ? Object.keys(_artifacts).length : 0,
+        //     isStreaming: false,
+        //     conversationId: null,
+        //     STACK_TRACE: new Error().stack?.split('\n').slice(1, 5).join('\n'),
+        //   },
+        // );
+
         const mergedContent = applyAllPartialUpdates(
           originalArtifact.content,
           _artifacts,
@@ -373,9 +391,28 @@ export default function ArtifactTabs({
       const systemInstructions = `You are helping edit code in an artifact. 
 When providing your updated code, use the artifactupdate directive format:
 
+FORMAT:
 :::artifactupdate{identifier="${artifact.identifier}" type="${artifact.type || 'text/html'}" title="${artifact.title || 'Updated Artifact'}"}
 \`\`\`${getLanguageFromType(artifact.type)}
-[your updated code here]
+<ONLY THE SELECTED/CHANGED CODE - NO OTHER CODE>
+\`\`\`
+:::
+
+❌ WRONG EXAMPLE (User asks "change background color to red"):
+:::artifactupdate{...}
+\`\`\`html
+<!DOCTYPE html>
+<html>
+<head>...</head>
+<body style="background: red;">...</body>
+</html>
+\`\`\`
+:::
+
+✅ CORRECT EXAMPLE (User asks "change background color to red"):
+:::artifactupdate{...}
+\`\`\`html
+<body style="background: red;">
 \`\`\`
 :::
 

@@ -59,6 +59,7 @@ export default function Artifacts() {
     };
   }, [isMobile]);
 
+  // Sync local isVisible state with Recoil artifactsVisibility state
   useEffect(() => {
     if (!isMobile) {
       setBlurAmount(0);

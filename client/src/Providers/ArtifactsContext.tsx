@@ -13,6 +13,8 @@ export interface ArtifactsContextValue {
   latestMessageId: string | null;
   latestMessageText: string;
   conversationId: string | null;
+  isMessageStreaming: boolean;
+  latestMessage: TMessage | null;
 }
 
 const ArtifactsContext = createContext<ArtifactsContextValue | undefined>(undefined);

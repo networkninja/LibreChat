@@ -605,6 +605,7 @@ class BaseClient {
     // When this is an edit, all messages are already in currentMessages, both user and response
     if (isEdited) {
       let latestMessage = this.currentMessages[this.currentMessages.length - 1];
+      console.log('latestMessage', this.options);
       if (!latestMessage) {
         latestMessage = {
           messageId: responseMessageId,
@@ -722,6 +723,7 @@ class BaseClient {
 
       if (!opts.editedContent || this.currentMessages.length === 0) {
         responseMessage.content = completion;
+        console.log('completion', completion);
       } else {
         const latestMessage = this.currentMessages[this.currentMessages.length - 1];
         if (!latestMessage?.content) {
@@ -953,6 +955,10 @@ class BaseClient {
       ...endpointOptions,
     };
 
+    if (fieldsToKeep.thinking) {
+      fieldsToKeep.thinking = fieldsToKeep.thinking.type == 'enabled' ? true : false;
+    }
+
     const existingConvo =
       this.fetchedConvo === true
         ? null
@@ -976,6 +982,10 @@ class BaseClient {
       }
     }
 
+    if (fieldsToKeep.thinking) {
+      fieldsToKeep.budget_tokens = fieldsToKeep.thinking.budget_tokens;
+      fieldsToKeep.thinking = fieldsToKeep.thinking.enabled ? true : false;
+    }
     const conversation = await saveConvo(this.options?.req, fieldsToKeep, {
       context: 'api/app/clients/BaseClient.js - saveMessageToDatabase #saveConvo',
       unsetFields,
@@ -1096,17 +1106,22 @@ class BaseClient {
       tokensPerMessage = 4;
       tokensPerName = -1;
     }
-
+    console.log(message);
+    let thinkingSet = false;
     const processValue = (value) => {
       if (Array.isArray(value)) {
         for (let item of value) {
           if (
             !item ||
             !item.type ||
-            item.type === ContentTypes.THINK ||
             item.type === ContentTypes.ERROR ||
             item.type === ContentTypes.IMAGE_URL
           ) {
+            continue;
+          }
+
+          if (item.type === ContentTypes.THINK) {
+            thinkingSet = true;
             continue;
           }
 

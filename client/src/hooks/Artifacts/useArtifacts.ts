@@ -33,7 +33,8 @@ export default function useArtifacts() {
   const [_refreshTrigger, setRefreshTrigger] = useRecoilState(artifactRefreshTriggerState);
   const [cacheLoaded, setCacheLoaded] = useState(false);
 
-  // Initialize cache from localStorage on first load
+  // CRITICAL: Initialize cache FIRST before loading artifacts
+  // This ensures selection contexts are available when artifacts are merged
   useEffect(() => {
     const loadCache = async () => {
     artifactCache.init();
@@ -179,8 +180,9 @@ export default function useArtifacts() {
       const cachedContent = artifactCache.getContent(artifactId);
       
       if (cachedContent && cachedContent.content !== artifact.content) {
-        console.log('💾 [useArtifacts] Hydrating artifact from cache:', {
+        console.log('💾 [useArtifacts] Hydrating BASE artifact from cache:', {
           artifactId,
+          isUpdate: artifact.isUpdate,
           cachedLength: cachedContent.content.length,
           currentLength: artifact.content?.length,
         });
@@ -199,9 +201,11 @@ export default function useArtifacts() {
       setArtifacts(updatedArtifacts);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId]); // Only run on conversationId change (initial load/refresh)
+  }, [conversationId, cacheLoaded]);
 
   const orderedArtifactIds = useMemo(() => {
+    console.log('artifacts in order', artifacts);
+    // Show all artifacts for now - no filtering
     return Object.keys(artifacts ?? {}).sort(
       (a, b) => (artifacts?.[a]?.lastUpdateTime ?? 0) - (artifacts?.[b]?.lastUpdateTime ?? 0),
     );
@@ -274,6 +278,7 @@ export default function useArtifacts() {
         resetState();
       }
     } else if (conversationId === Constants.NEW_CONVO) {
+      console.log('Starting new conversation, resetting artifacts');
       resetState();
     } else {
       if (!cacheLoaded) {
@@ -285,6 +290,12 @@ export default function useArtifacts() {
       if (!artifacts || Object.keys(artifacts).length === 0) {
         const storedArtifacts = loadArtifactsFromStorage(conversationId);
         if (storedArtifacts) {
+          console.log('📦 [useArtifacts] Loaded artifacts from storage:', {
+            count: Object.keys(storedArtifacts).length,
+            updateCount: Object.values(storedArtifacts).filter((a) => a?.isUpdate).length,
+            baseCount: Object.values(storedArtifacts).filter((a) => !a?.isUpdate).length,
+            selectionCacheSize: artifactCache._selectionCache.size,
+          });
           setArtifacts(storedArtifacts);
         } else {
           console.log('No stored artifacts found for conversation:', conversationId);
@@ -297,7 +308,6 @@ export default function useArtifacts() {
     // Update stored conversation ID
     saveConversationIdToStorage(conversationId);
     prevConversationIdRef.current = conversationId;
-    /** Resets artifacts when unmounting */
     return () => {
       console.log('artifacts_visibility', 'Unmounting artifacts');
       // resetState();
@@ -403,13 +413,18 @@ export default function useArtifacts() {
       /:::artifact(?:\{[^}]*\})?(?:\s|\n)*(?:```[\s\S]*?```(?:\s|\n)*)?:::/m.test(
         latestMessageText.trim(),
       );
+    console.log('hasEnclosedArtifact', hasEnclosedArtifact);
+
     // Detect artifact update marker
     const hasArtifactUpdate = latestMessageText.includes('::artifactupdate');
+    console.log('hasArtifactUpdate', hasArtifactUpdate);
 
     // Check if there's a cached update for this artifact
     const hasCachedUpdate = latestArtifact?.id && artifactCache.isSelectionValid(latestArtifact.id);
+    console.log('hasCachedUpdate for', latestArtifact?.id, hasCachedUpdate);
 
     if (hasEnclosedArtifact && !hasEnclosedArtifactRef.current) {
+      // New artifact created, switch to preview
       setActiveTab('preview');
       hasEnclosedArtifactRef.current = true;
       hasAutoSwitchedToCodeRef.current = false;
@@ -538,7 +553,7 @@ export default function useArtifacts() {
     currentIndex,
     currentArtifact: currentDisplayArtifact, // Use the display artifact everywhere
     orderedArtifactIds,
-    refreshArtifact,
+    refreshArtifact, // Add this new function
     artifactCache: artifactCache,
     setCurrentArtifactId,
     cacheLoaded,

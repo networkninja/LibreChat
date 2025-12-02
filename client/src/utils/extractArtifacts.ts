@@ -5,11 +5,11 @@
  */
 export function extractAllArtifactsFromMessage(messageText: string, messageId?: string) {
   if (!messageText) {
-    console.log('⚠️ [extractArtifacts] No message text provided');
+    // console.log('⚠️ [extractArtifacts] No message text provided');
     return [];
   }
 
-  console.log('🔍 [extractArtifacts] Processing message text length:', messageText.length);
+  // console.log('🔍 [extractArtifacts] Processing message text length:', messageText.length);
 
   // Regex to match both :::artifact and :::artifactupdate blocks
   const blockRegex = /:::(artifact(?:update)?)\s*\{([^}]*)\}:::\s*([\s\S]*?)\s*:::/g;
@@ -32,11 +32,11 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
       attributes[key] = value;
     }
 
-    console.log('🔧 [extractArtifacts] Parsed attributes:', attributes);
+    // console.log('🔧 [extractArtifacts] Parsed attributes:', attributes);
 
     // Ensure we have required attributes
     if (!attributes.identifier || !attributes.title || !attributes.type) {
-      console.log('⚠️ [extractArtifacts] Missing required attributes, using defaults');
+      // console.log('⚠️ [extractArtifacts] Missing required attributes, using defaults');
       attributes.identifier = attributes.identifier || `artifact-${matchCount}`;
       attributes.title = attributes.title || `Untitled Artifact ${matchCount}`;
       attributes.type = attributes.type || type || 'code';
@@ -50,10 +50,10 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
       const existingArtifact = artifactMap.get(identifier);
 
       if (existingArtifact) {
-        console.log(
-          '🔄 [extractArtifacts] Merging artifactupdate with existing artifact:',
-          identifier,
-        );
+        // console.log(
+        //   '🔄 [extractArtifacts] Merging artifactupdate with existing artifact:',
+        //   identifier,
+        // );
 
         // Apply intelligent merging
         const mergedContent = applyIntelligentMerge(existingArtifact.content, content.trim());
@@ -87,7 +87,18 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
 
         // Add the updated artifact to the map (keeps both original and updated)
         artifactMap.set(updatedIdentifier, updatedArtifact);
+
+        console.log('✅ [extractArtifacts] Updated artifact content:', {
+          identifier,
+          originalLength: existingArtifact.content.length - content.trim().length,
+          updateLength: content.trim().length,
+          mergedLength: mergedContent.length,
+        });
       } else {
+        console.log(
+          '⚠️ [extractArtifacts] artifactupdate found but no original artifact exists, treating as new artifact',
+        );
+
         // Create new artifact from update
         const id = [identifier, 'artifact', attributes.title, messageId || '']
           .join('_')
@@ -104,7 +115,7 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
           messageId,
           index: matchCount - 1,
           lastUpdateTime: Date.now(),
-          isUpdate: true,
+          isUpdate: false,
           ...attributes,
         };
 
@@ -146,94 +157,8 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
 function applyIntelligentMerge(originalContent: string, updateContent: string): string {
   console.log('🔀 [extractArtifacts] Applying intelligent merge');
 
-  // Simple strategy: if update content is significantly smaller, it might be a focused change
-  const originalLines = originalContent.split('\n');
-  const updateLines = updateContent.split('\n');
-
-  // If update is much smaller than original, try to find best insertion point
-  if (updateLines.length < originalLines.length * 0.8) {
-    console.log('📝 [extractArtifacts] Small update detected, using smart insertion');
-
-    // Find the best match point by looking for similar content
-    let bestMatch = -1;
-    let bestScore = 0;
-
-    for (let i = 0; i <= originalLines.length - updateLines.length; i++) {
-      let score = 0;
-      for (let j = 0; j < Math.min(3, updateLines.length); j++) {
-        if (i + j < originalLines.length) {
-          const similarity = calculateSimilarity(
-            originalLines[i + j].trim(),
-            updateLines[j].trim(),
-          );
-          score += similarity;
-        }
-      }
-      if (score > bestScore) {
-        bestScore = score;
-        bestMatch = i;
-      }
-    }
-
-    // If we found a good match (similarity > 0.6), replace that section
-    if (bestMatch >= 0 && bestScore > 0.6) {
-      const before = originalLines.slice(0, bestMatch);
-      const after = originalLines.slice(bestMatch + updateLines.length);
-      const merged = [...before, ...updateLines, ...after].join('\n');
-
-      console.log(
-        '🧠 [extractArtifacts] Smart merge applied at line',
-        bestMatch,
-        'with score',
-        bestScore,
-      );
-      return merged;
-    }
-  }
-
-  // Fallback: append the update content
-  console.log('📄 [extractArtifacts] Using append strategy');
-  return originalContent + '\n\n' + updateContent;
-}
-
-/**
- * Calculate similarity between two strings (0-1 score)
- */
-function calculateSimilarity(str1: string, str2: string): number {
-  if (str1 === str2) return 1;
-  if (str1.length === 0 || str2.length === 0) return 0;
-
-  const longer = str1.length > str2.length ? str1 : str2;
-  const shorter = str1.length > str2.length ? str2 : str1;
-
-  if (longer.length === 0) return 1;
-
-  // Simple character-based similarity
-  const editDistance = calculateEditDistance(longer, shorter);
-  return (longer.length - editDistance) / longer.length;
-}
-
-/**
- * Calculate edit distance between two strings using dynamic programming
- */
-function calculateEditDistance(str1: string, str2: string): number {
-  const matrix = Array(str2.length + 1)
-    .fill(null)
-    .map(() => Array(str1.length + 1).fill(null));
-
-  for (let i = 0; i <= str1.length; i++) matrix[0][i] = i;
-  for (let j = 0; j <= str2.length; j++) matrix[j][0] = j;
-
-  for (let j = 1; j <= str2.length; j++) {
-    for (let i = 1; i <= str1.length; i++) {
-      const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
-      matrix[j][i] = Math.min(
-        matrix[j][i - 1] + 1, // deletion
-        matrix[j - 1][i] + 1, // insertion
-        matrix[j - 1][i - 1] + indicator, // substitution
-      );
-    }
-  }
-
-  return matrix[str2.length][str1.length];
+  // For artifactupdate, simply replace the entire content
+  // This prevents duplication issues when updating HTML/code artifacts
+  console.log('✅ [extractArtifacts] Replacing entire artifact content with update');
+  return updateContent;
 }

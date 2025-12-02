@@ -48,6 +48,12 @@ const useNewConvo = (index = 0) => {
   const setSubmission = useSetRecoilState<TSubmission | null>(store.submissionByIndex(index));
   const { data: endpointsConfig = {} as TEndpointsConfig } = useGetEndpointsQuery();
 
+  // CRITICAL: Add artifact reset functionality
+  const resetArtifacts = useResetRecoilState(store.artifactsState);
+  const resetCurrentArtifactId = useResetRecoilState(store.currentArtifactId);
+  const resetArtifactsVisibility = useResetRecoilState(store.artifactsVisibility);
+  const resetVisibleArtifacts = useResetRecoilState(store.visibleArtifacts);
+
   const modelsQuery = useGetModelsQuery();
   const assistantsListMap = useAssistantListMap();
   const { pauseGlobalAudio } = usePauseGlobalAudio(index);
@@ -234,6 +240,13 @@ const useNewConvo = (index = 0) => {
       if (!saveBadgesState) {
         resetBadges();
       }
+
+      // CRITICAL: Reset artifacts when creating a new conversation
+      console.log('🔄 [useNewConvo] Resetting artifacts for new conversation');
+      resetArtifacts();
+      resetCurrentArtifactId();
+      resetArtifactsVisibility();
+      resetVisibleArtifacts(); // <-- This line ensures visibleArtifacts is cleared
 
       const templateConvoId = _template.conversationId ?? '';
       const paramEndpoint =
