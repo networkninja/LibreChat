@@ -155,14 +155,7 @@ const useNewConvo = (index = 0) => {
           // When false, use the active preset (which could be null, allowing fallback to localStorage)
           let lastConversationSetup: TConversation | null = null;
 
-          if (useDefaultLastModel && defaultModelSpec) {
-            // Use default model spec's preset when useDefaultLastModel is true
-            lastConversationSetup = defaultModelSpec.preset as TConversation;
-            // Overwrite conversation fields with lastConversationSetup
-            if (lastConversationSetup) {
-              conversation = { ...conversation, ...lastConversationSetup };
-            }
-          } else if (!useDefaultLastModel && activePreset) {
+          if (!useDefaultLastModel && activePreset) {
             // Use active preset when useDefaultLastModel is false
             lastConversationSetup = activePreset as TConversation;
           } else {
@@ -171,7 +164,7 @@ const useNewConvo = (index = 0) => {
           }
           conversation = buildDefaultConvo({
             conversation,
-            lastConversationSetup,
+            lastConversationSetup: activePreset as TConversation,
             endpoint: defaultEndpoint,
             models,
           });
@@ -273,18 +266,20 @@ const useNewConvo = (index = 0) => {
       };
 
       let preset = _preset;
-      const defaultModelSpec = getDefaultModelSpec(startupConfig);
+      const result = getDefaultModelSpec(startupConfig);
+      const defaultModelSpec = result?.default ?? result?.last;
       if (
         !preset &&
         startupConfig &&
         (startupConfig.modelSpecs?.prioritize === true ||
-          (startupConfig.interface?.modelSelect ?? true) !== true) &&
+          (startupConfig.interface?.modelSelect ?? true) !== true ||
+          (result?.last != null && Object.keys(_template).length === 0)) &&
         defaultModelSpec
       ) {
         preset = getModelSpecPreset(defaultModelSpec);
       }
 
-      if (conversation.conversationId === 'new' && !modelsData) {
+      if (conversation.conversationId === Constants.NEW_CONVO && !modelsData) {
         const filesToDelete = Array.from(files.values())
           .filter(
             (file) =>
