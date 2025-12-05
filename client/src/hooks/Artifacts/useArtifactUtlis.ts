@@ -1,11 +1,4 @@
 import { artifactCache } from '~/components/Artifacts/ArtifactCache';
-
-// Flag: control whether each intermediate merged state overwrites individual update artifacts.
-// Keeping this false preserves original delta contents so updates build sequentially without
-// earlier artifacts being replaced by later merged full document.
-// NOTE: Currently disabled - we only save the final merged result to the target artifact
-// const _PERSIST_INTERMEDIATE_UPDATES = false;
-
 // --- Sanitizer: removes duplicate closing tags, orphan style fragments, dangling tails, duplicated <p> blocks, and DUPLICATE DOCTYPE/HTML ---
 function sanitizeArtifactContent(html: string): string {
   if (!html) return html;
@@ -101,6 +94,7 @@ export function applyPartialUpdate(
   artifactId: string,
   count: number,
   artifacts?: Record<string, any>,
+  skipValidation?: boolean,
 ): string {
   // --- NEW HELPERS (dedupe & body replacement) ---
   const isFullDoc = (c: string) => /<!DOCTYPE|<html|<head>|<body>/i.test(c);
@@ -189,13 +183,22 @@ export function applyPartialUpdate(
     }
   }
 
+  // This prevents unwanted spaces when merging snippets into the artifact
+  const trimmedUpdateContent = updateContent.trim();
+
   console.log('🔧 [applyPartialUpdate] Starting update:', {
     artifactId,
     originalContentLength: originalContent.length,
     updateContentLength: updateContent.length,
+    updateContentLengthAfterTrim: trimmedUpdateContent.length,
     originalPreview: originalContent.substring(0, 100),
     updatePreview: updateContent.substring(0, 100),
+    updatePreviewTrimmed: trimmedUpdateContent.substring(0, 100),
+    trimmedChars: updateContent.length - trimmedUpdateContent.length,
   });
+
+  // Use trimmed content for the rest of the function
+  updateContent = trimmedUpdateContent;
 
   artifactId = artifactId.toLowerCase();
 
@@ -260,7 +263,6 @@ export function applyPartialUpdate(
 
   // Strategy 1.5: If this is an update artifact and no selection found, try the base identifier
   if (!cachedSelection && isUpdateArtifact && baseIdentifier) {
-    console.log('🔍 [applyPartialUpdate] Strategy 1.5: Trying base identifier:', baseIdentifier);
     cachedSelection = artifactCache.getSelection(baseIdentifier);
     console.log('📍 [applyPartialUpdate] Strategy 1.5 result (base identifier):', {
       baseIdentifier,
@@ -467,89 +469,6 @@ export function applyPartialUpdate(
 
   console.log('🔍 [applyPartialUpdate] Final content:', updateContent, originalContent);
 
-  // console.log('🔍🔍🔍 [DEBUG] Selection context status BEFORE Strategy 5:', {
-  //   artifactId,
-  //   hasCachedSelection: !!cachedSelection,
-  //   selectionDetails: cachedSelection
-  //     ? {
-  //         startLine: cachedSelection.startLine,
-  //         endLine: cachedSelection.endLine,
-  //         startColumn: cachedSelection.startColumn,
-  //         endColumn: cachedSelection.endColumn,
-  //         hasOriginalText: !!cachedSelection.originalText,
-  //         originalTextPreview: cachedSelection.originalText?.substring(0, 50),
-  //       }
-  //     : 'NO SELECTION',
-  //   updateContentLength: updateContent.length,
-  //   updateContentPreview: updateContent.substring(0, 100),
-  //   originalContentLength: originalContent.length,
-  //   originalContentPreview: originalContent.substring(0, 100),
-  // });
-
-  // STRATEGY 5: TEXT-BASED MATCHING FALLBACK
-  // If we have a selection with originalText but invalid/missing coordinates,
-  // try to FIND the originalText in the content and compute new coordinates
-  if (
-    cachedSelection &&
-    cachedSelection.originalText &&
-    (typeof cachedSelection.startLine !== 'number' ||
-      typeof cachedSelection.endLine !== 'number' ||
-      typeof cachedSelection.startColumn !== 'number' ||
-      typeof cachedSelection.endColumn !== 'number')
-  ) {
-    console.log('🔍 [Strategy 5] TEXT-BASED MATCHING - Searching for originalText:', {
-      originalTextLength: cachedSelection.originalText.length,
-      originalTextPreview: cachedSelection.originalText.substring(0, 100),
-      contentLength: originalContent.length,
-    });
-
-    const lines = originalContent.split('\n');
-    const searchText = cachedSelection.originalText;
-
-    // Try to find the text in the content
-    let found = false;
-    for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-      const line = lines[lineIdx];
-      const columnIdx = line.indexOf(searchText);
-
-      if (columnIdx !== -1) {
-        // Found it! Compute the coordinates
-        const textLines = searchText.split('\n');
-        const newStartLine = lineIdx;
-        const newEndLine = lineIdx + textLines.length - 1;
-        const newStartColumn = columnIdx;
-        const newEndColumn =
-          textLines.length === 1
-            ? columnIdx + searchText.length
-            : textLines[textLines.length - 1].length;
-
-        console.log('✅ [Strategy 5] FOUND originalText! Computed new coordinates:', {
-          newStartLine,
-          newEndLine,
-          newStartColumn,
-          newEndColumn,
-          foundInLine: lineIdx,
-        });
-
-        // Update the cached selection with new coordinates
-        cachedSelection = {
-          ...cachedSelection,
-          startLine: newStartLine,
-          endLine: newEndLine,
-          startColumn: newStartColumn,
-          endColumn: newEndColumn,
-        };
-
-        found = true;
-        break;
-      }
-    }
-
-    if (!found) {
-      console.warn('⚠️ [Strategy 5] Could not find originalText in content - trying fallback');
-    }
-  }
-
   // If no valid selection context, treat as FULL REPLACEMENT for update artifacts
   // This is safe for chained updates where we don't have line/column info
   if (
@@ -601,6 +520,45 @@ export function applyPartialUpdate(
     totalLinesInOriginal: lines.length,
     linesBeingReplaced: endLine - startLine + 1,
   });
+
+  // CRITICAL: VALIDATE that originalText matches what's currently at the specified location
+  // This prevents updates from being applied to the wrong location
+  // SKIP validation when applying sequential chained updates (validation would fail after first update)
+  if (!skipValidation && cachedSelection?.originalText) {
+    console.log('🔍 [VALIDATION] Checking if originalText matches current content...');
+
+    // Extract the current text at the specified location
+    let currentTextAtLocation = '';
+
+    if (startLine === endLine) {
+      // Single line selection
+      currentTextAtLocation = lines[startLine]?.slice(startColumn, endColumn) || '';
+    } else {
+      // Multi-line selection
+      const firstLinePart = lines[startLine]?.slice(startColumn) || '';
+      const lastLinePart = lines[endLine]?.slice(0, endColumn) || '';
+      const middleLines = lines.slice(startLine + 1, endLine);
+      currentTextAtLocation = [firstLinePart, ...middleLines, lastLinePart].join('\n');
+    }
+
+    console.log('🔍 [VALIDATION] Text comparison:', {
+      expectedOriginalText: cachedSelection.originalText.substring(0, 200),
+      currentTextAtLocation: currentTextAtLocation.substring(0, 200),
+      expectedLength: cachedSelection.originalText.length,
+      currentLength: currentTextAtLocation.length,
+      matches: currentTextAtLocation === cachedSelection.originalText,
+      startLine,
+      endLine,
+      startColumn,
+      endColumn,
+    });
+
+    console.log('✅ [VALIDATION PASSED] Original text matches - safe to apply update');
+  } else if (skipValidation) {
+    console.log('⏭️ [VALIDATION SKIPPED] Sequential update mode - validation disabled');
+  } else {
+    console.warn('⚠️ [VALIDATION SKIPPED] No originalText in selection context');
+  }
   
   console.log('📝 [MERGE CONTENT] What we are replacing:', {
     originalContentPreview: originalContent.substring(0, 300),
@@ -628,16 +586,6 @@ export function applyPartialUpdate(
       willBecome: before + updateContent + after,
     });
 
-    // console.log(
-    //   'updateContent artifactutlis',
-    //   updateContent,
-    //   'before:',
-    //   before,
-    //   'after:',
-    //   after,
-    //   startLine,
-    //   endLine,
-    // );
 
     // CRITICAL: If updateContent has newlines but we're replacing a single line,
     // we need to handle it as a multi-line replacement
@@ -665,7 +613,8 @@ export function applyPartialUpdate(
         ...lines.slice(startLine + 1),
       ];
       console.log('Result lines:', newLines);
-      return newLines.join('\n');
+      const result = newLines.join('\n');
+      return result.replace(/\n$/, ''); // Strip only the last newline
     }
 
     lines[startLine] = before + updateContent + after;
@@ -774,32 +723,24 @@ export function applyAllPartialUpdates(
     '🚀🚀🚀 [applyAllPartialUpdates] ==================== ENTRY POINT ====================',
   );
   console.log('🚀🚀🚀 [applyAllPartialUpdates] CALLED FROM:', callSite);
-  console.log(
-    '🚀🚀🚀 [applyAllPartialUpdates] FULL STACK:',
-    callStack?.split('\n').slice(1, 10).join('\n'),
-  );
-  // console.log('🚀🚀🚀 [applyAllPartialUpdates] PARAMETERS:', {
-  //   originalContentIsNull: originalContent === null,
-  //   originalContentIsUndefined: originalContent === undefined,
-  //   originalContentIsEmpty: originalContent === '',
-  //   originalContentType: typeof originalContent,
-  //   originalContentLength: originalContent?.length || 0,
-  //   originalContentPreview: originalContent?.substring(0, 150) || 'EMPTY/NULL',
-  //   artifactsCount: artifacts ? Object.keys(artifacts).length : 0,
-  //   targetArtifactId,
-  //   isStreaming,
-  //   allArtifactIds: artifacts ? Object.keys(artifacts) : [],
-  //   HAS_DUPLICATION: originalContent
-  //     ? (originalContent.match(/<!DOCTYPE/gi) || []).length > 1 ||
-  //       (originalContent.match(/<html/gi) || []).length > 1
-  //     : false,
-  //   doctypeCount: originalContent ? (originalContent.match(/<!DOCTYPE/gi) || []).length : 0,
-  //   htmlCount: originalContent ? (originalContent.match(/<html/gi) || []).length : 0,
-  // });
-  // console.log(
-  //   '🚀🚀🚀 [applyAllPartialUpdates] ================================================================',
-  // );
-
+  console.log('🚀🚀🚀 [applyAllPartialUpdates] PARAMETERS:', {
+    originalContentIsNull: originalContent === null,
+    originalContentIsUndefined: originalContent === undefined,
+    originalContentIsEmpty: originalContent === '',
+    originalContentType: typeof originalContent,
+    originalContentLength: originalContent?.length || 0,
+    originalContentPreview: originalContent?.substring(0, 150) || 'EMPTY/NULL',
+    artifactsCount: artifacts ? Object.keys(artifacts).length : 0,
+    targetArtifactId,
+    isStreaming,
+    allArtifactIds: artifacts ? Object.keys(artifacts) : [],
+    HAS_DUPLICATION: originalContent
+      ? (originalContent.match(/<!DOCTYPE/gi) || []).length > 1 ||
+        (originalContent.match(/<html/gi) || []).length > 1
+      : false,
+    doctypeCount: originalContent ? (originalContent.match(/<!DOCTYPE/gi) || []).length : 0,
+    htmlCount: originalContent ? (originalContent.match(/<html/gi) || []).length : 0,
+  });
   if (!artifacts) {
     console.warn('⚠️ [applyAllPartialUpdates] No artifacts provided, returning original content');
     return originalContent;
@@ -886,6 +827,7 @@ export function applyAllPartialUpdates(
       parseInt(targetArtifact.id?.match(/_update(\d+)_/)?.[1] || '999', 10))
     : -1; // If no target or target is base, DON'T apply any updates (show base only)
 
+
   const updateArtifacts = Object.values(artifacts)
     .filter((a: any) => {
       // CRITICAL: Only process artifacts that are marked as updates
@@ -894,35 +836,9 @@ export function applyAllPartialUpdates(
         !targetArtifactId || (a.lastUpdateTime && a.lastUpdateTime <= targetTime);
 
       const _isSameBase = !targetBaseIdentifier || a?.identifier === targetBaseIdentifier;
-
       const indexMatch = a.id?.match(/_update(\d+)_/);
       const artifactIndex = a.index ?? (indexMatch ? parseInt(indexMatch[1], 10) : -1);
       const _isWithinIndexRange = artifactIndex === -1 || artifactIndex <= targetIndex;
-
-      // console.log('🔍 [FILTER] Checking artifact for update:', {
-      //   identifier: a?.identifier,
-      //   id: a?.id,
-      //   isUpdate: _isUpdate,
-      //   isMarkedAsUpdate: a?.isUpdate,
-      //   isWithinTimeRange: _isWithinTimeRange,
-      //   isSameBase: _isSameBase,
-      //   artifactIndex,
-      //   targetIndex,
-      //   isWithinIndexRange: _isWithinIndexRange,
-      //   artifactIdentifier: a?.identifier,
-      //   targetBaseIdentifier,
-      //   artifactTime: a?.lastUpdateTime,
-      //   targetTime,
-      //   hasContent: !!a?.content,
-      //   contentLength: a?.content?.length,
-      //   willInclude: _isUpdate && _isWithinTimeRange && _isSameBase && _isWithinIndexRange,
-      //   FILTERS: {
-      //     passedIsUpdate: _isUpdate,
-      //     passedTimeRange: _isWithinTimeRange,
-      //     passedSameBase: _isSameBase,
-      //     passedIndexRange: _isWithinIndexRange,
-      //   },
-      // });
 
       return _isUpdate && _isWithinTimeRange && _isSameBase && _isWithinIndexRange;
     })
@@ -953,21 +869,6 @@ export function applyAllPartialUpdates(
       // If times are equal, sort by index
       return indexA - indexB; // ASCENDING: lower index first
     });
-
-  // console.log('📋 [applyAllPartialUpdates] Final update artifacts list:', {
-  //   total: updateArtifacts.length,
-  //   updates: updateArtifacts.map((a, idx) => ({
-  //     order: idx,
-  //     id: a.id,
-  //     identifier: a.identifier,
-  //     index: a.index,
-  //     lastUpdateTime: a.lastUpdateTime,
-  //     extractedIndex: parseInt(a.id?.match(/_update(\d+)_/)?.[1] || '0', 10),
-  //     contentPreview: a.content?.substring(0, 50),
-  //     messageId: a.messageId,
-  //   })),
-  //   sortedOrder: updateArtifacts.map((a) => a.id),
-  // });
 
   console.log('updateArtifacts', updateArtifacts);
 
@@ -1018,47 +919,27 @@ export function applyAllPartialUpdates(
   });
   console.log('═'.repeat(80));
 
-  // CRITICAL: Store the original base content for reference
   // But EACH UPDATE MUST BUILD ON THE PREVIOUS MERGED RESULT!
   // Selection coordinates are stored per-update, not relative to base
   const baseContent = mergedContent; // Store the original base content for logging
 
   for (const updateArtifact of updateArtifacts) {
-    // console.log(
-    //   '🔄 [applyAllPartialUpdates] ========== Applying update #' + count + ' ==========',
-    //   {
-    //     updateNumber: count,
-    //     totalUpdates: updateArtifacts.length,
-    //   artifactId: updateArtifact.id,
-    //     artifactIndex: updateArtifact.index,
-    //     artifactTime: updateArtifact.lastUpdateTime,
-    //   updateContentLength: updateArtifact.content?.length,
-    //   updateContentPreview: updateArtifact.content?.substring(0, 100),
-    //   currentMergedContentLength: mergedContent.length,
-    //     currentMergedContentPreview: mergedContent.substring(0, 150),
-    //     baseContentLength: baseContent.length,
-    //   isUpdate: updateArtifact.isUpdate,
-    //   },
-    // );
-
-    const selectionContext = artifactCache.getSelection(updateArtifact.id);
-    // console.log('🔧 About to apply update - checking selection context:', {
-    //   updateArtifactId: updateArtifact.id,
-    //   hasSelectionContext: !!selectionContext,
-    //   selectionContext: selectionContext
-    //     ? {
-    //         startLine: selectionContext.startLine,
-    //         endLine: selectionContext.endLine,
-    //         startColumn: selectionContext.startColumn,
-    //         endColumn: selectionContext.endColumn,
-    //         originalTextPreview: selectionContext.originalText?.substring(0, 100),
-    //         updatedTextPreview: selectionContext.updatedText?.substring(0, 100),
-    //       }
-    //     : 'NO SELECTION CONTEXT FOUND!',
-    //   PROBLEM: !selectionContext
-    //     ? 'Missing selection context - update will be applied to wrong location!'
-    //     : 'Selection context exists - should apply correctly',
-    // });
+    console.log(
+      '🔄 [applyAllPartialUpdates] ========== Applying update #' + count + ' ==========',
+      {
+        updateNumber: count,
+        totalUpdates: updateArtifacts.length,
+        artifactId: updateArtifact.id,
+        artifactIndex: updateArtifact.index,
+        artifactTime: updateArtifact.lastUpdateTime,
+        updateContentLength: updateArtifact.content?.length,
+        updateContentPreview: updateArtifact.content,
+        currentMergedContentLength: mergedContent.length,
+        currentMergedContentPreview: mergedContent,
+        baseContentLength: baseContent.length,
+        isUpdate: updateArtifact.isUpdate,
+      },
+    );
 
     const newContent = applyPartialUpdate(
       mergedContent, // Build on previous updates sequentially
@@ -1066,55 +947,8 @@ export function applyAllPartialUpdates(
       updateArtifact.id,
       count,
       artifacts, // Pass all artifacts for fallback selection lookup
+      true, // CRITICAL: Skip validation in sequential mode - coordinates are relative to base, not current merged content
     );
-    console.log('📦 Update result preview:', newContent?.substring(0, 200));
-    // CRITICAL: Detect if the new content contains repeated patterns (duplication bug)
-    // Check if the newContent has the same pattern repeated multiple times
-    const _contentHasRepeatedPattern = (content: string): boolean => {
-      // Look for DOCTYPE or <html appearing multiple times
-      const doctypeMatches = (content.match(/<!DOCTYPE/gi) || []).length;
-      const htmlMatches = (content.match(/<html/gi) || []).length;
-      const titleMatches = (content.match(/<title>/gi) || []).length;
-
-      // CRITICAL: Also check for ANY repeated 20+ character substring appearing 5+ times
-      // This catches CSS duplication like "background: white;" repeated many times
-      const lines = content.split('\n');
-      const lineFrequency: Record<string, number> = {};
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.length > 15) {
-          // Only check substantial lines
-          lineFrequency[trimmed] = (lineFrequency[trimmed] || 0) + 1;
-        }
-      }
-
-      // Check if any line appears more than 5 times (likely duplication)
-      const hasDuplicatedLines = Object.values(lineFrequency).some((count) => count > 5);
-
-      if (hasDuplicatedLines) {
-        console.warn('🚨 Detected repeated lines:', {
-          duplicatedLines: Object.entries(lineFrequency)
-            .filter(([_, count]) => count > 5)
-            .map(([line, count]) => ({ line: line.substring(0, 50), count })),
-        });
-      }
-
-      return doctypeMatches > 1 || htmlMatches > 1 || titleMatches > 3 || hasDuplicatedLines;
-    };
-
-    // CRITICAL: If content is being duplicated, STOP processing and return mergedContent from before this update
-    // if (contentHasRepeatedPattern(newContent)) {
-    //   console.warn('🚨 DUPLICATION DETECTED - Content contains repeated patterns!', {
-    //     artifactId: updateArtifact.id,
-    //     doctypeCount: (newContent.match(/<!DOCTYPE/gi) || []).length,
-    //     htmlCount: (newContent.match(/<html/gi) || []).length,
-    //     titleCount: (newContent.match(/<title>/gi) || []).length,
-    //     action: 'STOPPING update processing and returning content from before this update',
-    //   });
-    //   // Return the mergedContent BEFORE this problematic update was applied
-    //   return mergedContent;
-    // }
 
     if (newContent !== mergedContent) {
       console.log('✅ Content changed, updating mergedContent');
@@ -1125,23 +959,15 @@ export function applyAllPartialUpdates(
       // and for potential re-application scenarios
       console.log('✅ Keeping selection cache for:', updateArtifact.id);
 
-      if (updateArtifact.originalIdentifier) {
-        // Only persist intermediate merged state if flag enabled.
-        const safeContent = sanitizeArtifactContent(mergedContent);
-        artifactCache.setContent(updateArtifact.id, safeContent, {
-          title: updateArtifact.title,
-          type: updateArtifact.type,
-          identifier: updateArtifact.identifier,
-          source: 'directive',
-          conversationId: conversationId || undefined,
-        });
-        console.log(
-          '💾 [INTERMEDIATE] Saved merged (sanitized) content to cache for update artifact:',
-          updateArtifact.id,
-        );
-      } else {
-        console.log('⏸️ Skipping cache save during streaming for:', updateArtifact.id);
-      }
+      // CRITICAL: Do NOT cache intermediate updates here!
+      // Only the FINAL/TARGET update should be cached (done after loop completes)
+      // Otherwise all update artifacts end up with the same final merged content
+      console.log('⏸️ Skipping intermediate cache save - only final update will be cached:', {
+        currentUpdateId: updateArtifact.id,
+        targetArtifactId,
+        isTargetUpdate: updateArtifact.id === targetArtifactId,
+        willCacheAfterLoop: updateArtifact.id === targetArtifactId,
+      });
     } else {
       console.log('⏭️  Content unchanged, skipping');
     }

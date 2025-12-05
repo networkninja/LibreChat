@@ -80,7 +80,6 @@ export default function ArtifactTabs({
       return finalArtifact;
     }
 
-    //if (!latestMessage?.content || !latestMessage.messageId) return;
     // If this is an update artifact, we need to merge all updates up to this point
     if (finalArtifact.isUpdate) {
       // Don't split it - just use it directly (splitting would break identifiers with underscores)
@@ -378,6 +377,7 @@ export default function ArtifactTabs({
   const contentRef = useRef<HTMLDivElement>(null);
   useAutoScroll({ ref: contentRef, content, isSubmitting });
 
+
   // Helper function to get language from artifact type
   const getLanguageFromType = (type?: string): string => {
     if (type === 'code/javascript') return 'javascript';
@@ -391,10 +391,9 @@ export default function ArtifactTabs({
       const systemInstructions = `You are helping edit code in an artifact. 
 When providing your updated code, use the artifactupdate directive format:
 
-FORMAT:
 :::artifactupdate{identifier="${artifact.identifier}" type="${artifact.type || 'text/html'}" title="${artifact.title || 'Updated Artifact'}"}
 \`\`\`${getLanguageFromType(artifact.type)}
-<ONLY THE SELECTED/CHANGED CODE - NO OTHER CODE>
+[your updated code here]
 \`\`\`
 :::
 
