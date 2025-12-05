@@ -5,8 +5,8 @@ import { useLocation } from 'react-router-dom';
 import type { Pluggable } from 'unified';
 import type { Artifact } from '~/common';
 import { useMessageContext, useArtifactContext, useArtifactsContext } from '~/Providers';
+import { logger, extractNodes, extractContent, isArtifactRoute } from '~/utils';
 import { artifactsState } from '~/store/artifacts';
-import { extractNodes, extractContent } from '~/utils';
 import ArtifactButton from './ArtifactButton';
 import { artifactCache } from './ArtifactCache';
 import store from '~/store';
@@ -133,6 +133,7 @@ export function Artifact({
   // Track streaming state to save cache only when complete
   const lastIsSubmittingRef = useRef<boolean>(false);
   const pendingCacheUpdates = useRef<Map<string, { content: string; metadata: any }>>(new Map()); 
+
   useEffect(() => {
     const handleBeforeUnload = () => {
       console.log('⚠️ [Artifact] Page unloading, flushing pending database syncs...');
@@ -220,76 +221,6 @@ export function Artifact({
               return;
             }
 
-            console.log('🔄 [Artifact] Checking RECENT update artifact for final merge:', {
-              artifactId,
-              isUpdate: artifact.isUpdate,
-              isMerged: artifact.isMerged,
-              age: artifactAge,
-              contentLength: artifact.content?.length || 0,
-              contentPreview: artifact.content?.substring(0, 100),
-              WILL_PROCESS: true,
-              CRITICAL: 'This is a RECENT update from the current streaming session',
-            });
-
-            // Process this recent update artifact
-
-            // Find the base artifact for this update
-            const baseArtifact = Object.values(updatedArtifacts).find(
-              (a) => a && !a.isUpdate && a.identifier === artifact.identifier,
-            );
-
-            if (baseArtifact && baseArtifact.content) {
-              console.log('🔀 [Artifact] Applying FINAL merge after streaming complete:', {
-                updateArtifactId: artifactId,
-                baseArtifactId: baseArtifact.id,
-                currentContentLength: artifact.content?.length || 0,
-                baseLength: baseArtifact.content.length,
-                wasAlreadyMerged: artifact.isMerged,
-                CRITICAL: 'This is the definitive merge - streaming is complete',
-              });
-
-              // Apply the merge
-              const mergedContent = applyPartialUpdate(
-                baseArtifact.content,
-                artifact.content || '',
-                artifactId,
-                0,
-                updatedArtifacts,
-              );
-
-              if (mergedContent && mergedContent !== baseArtifact.content) {
-                console.log('✅✅✅ [Artifact] FINAL MERGE SUCCESSFUL:', {
-                  artifactId,
-                  currentContentLength: artifact.content?.length || 0,
-                  finalMergedLength: mergedContent.length,
-                  isFullDocument:
-                    mergedContent.includes('<!DOCTYPE') || mergedContent.includes('<html'),
-                  CRITICAL: 'Artifact now contains complete merged document',
-                });
-
-                updatedArtifacts[artifactId] = {
-                  ...artifact,
-                  content: mergedContent, // Replace with final merged content
-                  isMerged: true, // Mark as fully merged (streaming complete)
-                };
-                hasUpdates = true;
-              } else if (mergedContent === baseArtifact.content) {
-                console.warn(
-                  '⚠️ [Artifact] Merge returned unchanged base - no selection context?',
-                  {
-                    artifactId,
-                    baseLength: baseArtifact.content.length,
-                    snippetLength: artifact.content?.length || 0,
-                  },
-      );
-              }
-            } else {
-              console.warn('⚠️ [Artifact] No base artifact found for update:', {
-                updateArtifactId: artifactId,
-                identifier: artifact.identifier,
-                ISSUE: 'Cannot merge without base artifact',
-              });
-            }
           });
 
           if (hasUpdates) {
@@ -371,69 +302,9 @@ export function Artifact({
         content = ''; // Clear content to trigger fallback
     } else {
         content = rawContent;
-        // console.log('✅ Using code from node.data.extractedCode:', {
-        //   contentLength: content.length,
-        //   contentPreview: content.substring(0, 200),
-        //   VALIDATION: {
-        //     hasGeorgia: content.includes('font-family: Georgia'),
-        //     hasPreviousColor: content.includes('color: #2c3e50'),
-        //   },
-        // });
       }
     }
 
-    if (!content) {
-      // Strategy 2: Extract from code block in children
-      function findCodeBlock(node: any): string | null {
-        if (!node) return null;
-
-        // Direct code node with value property (from markdown AST)
-        if (node.type === 'code' && typeof node.value === 'string') {
-          console.log('✅ Found code node with value');
-          return node.value;
-        }
-
-        // React code element
-        if (node.props) {
-          const isCodeElement = 
-            node.type === 'code' || 
-            (typeof node.props.className === 'string' &&
-              node.props.className.includes('language-'));
-
-          if (isCodeElement && typeof node.props.children === 'string') {
-            console.log('✅ Found React code element');
-            return node.props.children;
-          }
-
-          // Recursively search props.children
-          if (node.props.children) {
-            const found = findCodeBlock(node.props.children);
-            if (found) return found;
-          }
-        }
-
-        // Search array of children
-        if (Array.isArray(node)) {
-          for (const child of node) {
-            const found = findCodeBlock(child);
-          if (found) return found;
-          }
-        }
-
-        // Search children property
-        if (node.children) {
-          const found = findCodeBlock(node.children);
-          if (found) return found;
-        }
-
-        return null;
-      }
-
-      const codeContent = findCodeBlock(props.children);
-      if (codeContent) {
-        content = codeContent;
-        console.log('✅ Extracted from code block in children:', content.length, 'chars');
-      } else {
         // Last resort fallback
         content = extractContent(props.children);
         console.warn(
@@ -441,8 +312,6 @@ export function Artifact({
           content.length,
           'chars',
         );
-      }
-    }
 
     // Skip if still no content
     if (!content || content.trim() === '') {
@@ -544,13 +413,12 @@ export function Artifact({
           CRITICAL: 'Key does NOT include messageId or timestamp - must match ArtifactCodeEditor',
         });
 
-        // CRITICAL FIX: Only perform merge when streaming is COMPLETE
-        // During streaming, just accumulate the content in the update artifact
-        // This prevents character-by-character merges that cause duplication
-        const _isStreaming = artifactsContext?.isSubmitting;
+        const _isStreaming = artifactsContext?.isSubmitting; // Changed from isStreaming to isSubmitting
         let noMergeHappened = false;
+        const wasTruncated =
+          content.length > 0 && finalContent.length < baseContent.length + content.length;
 
-        if (_isStreaming) {
+        if (_isStreaming || wasTruncated) {
           // STREAMING: Just store the incoming snippet as-is, don't merge yet
           console.log('🌊 [Artifact Update] STREAMING - storing snippet without merge:', {
             incomingContentLength: content.length,
@@ -580,7 +448,7 @@ export function Artifact({
             baseContent, // Content from mostRecentArtifact (could be base or previous update)
             content, // NEW snippet from LLM (COMPLETE)
             updateArtifactKey, // Use UPDATE artifact key for selection lookup
-          0,
+            Object.keys(_artifacts || {}).length,
           _artifacts || undefined,
         );
       }
@@ -810,7 +678,7 @@ export function Artifact({
         const displayArtifact = {
           ...updateArtifact,
           content: finalContent, // ALWAYS use merged content for display
-          isMerged: !artifactsContext.isSubmitting && !noMergeHappened, // Only mark as merged if merge succeeded
+          isMerged: !artifactsContext.isSubmitting && !noMergeHappened, // Only mark as merged if merge succeeded (using isSubmitting)
         };
 
         setArtifacts((prevArtifacts) => {
@@ -1013,9 +881,9 @@ export function Artifact({
     props.title,
     props.type,
     props.identifier,
-    artifactsContext.isSubmitting,
-    _artifacts,
+    artifactsContext,
     isArtifactUpdateNode,
+    _artifacts,
     location.pathname,
     setArtifacts,
     setCurrentArtifactId,
@@ -1661,21 +1529,10 @@ export function Artifact({
   useEffect(() => {
     // Compose a unique key for the artifact update
     const updateKey = `${props.identifier}_${props.type}_${props.title}_${messageId}`;
-    let content = extractContent(props.children);
     const extracted = extractNodes(props.children);
+    let content = '';
 
-    // console.log('🔍 [Artifact useEffect] Entry:', {
-    //   isArtifactUpdateNode,
-    //   propsIdentifier: props.identifier,
-    //   propsType: props.type,
-    //   propsTitle: props.title,
-    //   messageId,
-    //   hasPropsChildren: !!props.children,
-    //   contentFromExtractContent: content?.substring(0, 100),
-    //   extractedNodes: extracted,
-    // });
-
-    if (!content) {
+    // Prioritize extractedNodes (from markdown plugin) over extractContent
       if (typeof extracted === 'string') {
         content = extracted;
       } else if (Array.isArray(extracted)) {
@@ -1687,23 +1544,15 @@ export function Artifact({
         }
       } else if (extracted !== undefined && extracted !== null) {
         content = String(extracted);
-      } else {
-        content = '';
-      }
     }
 
-    // For artifact updates: Always update to merge continuously, even with empty content
-    // For regular artifacts: Only update if there's actual content
+    // Only fall back to extractContent if extractNodes didn't yield anything
+    if (!content) {
+      content = extractContent(props.children);
+      }
     const hasContent = content && content.trim() !== '';
     const shouldProcess = isArtifactUpdateNode || hasContent;
 
-    // Check if incoming content is a full document (should always be processed, not deduplicated)
-    const isFullDoc = /<!DOCTYPE|<html|<head>|<body>/i.test(content);
-
-    // CRITICAL: Process artifact updates when:
-    // 1. Streaming just completed (transition from true to false)
-    // 2. Not streaming AND content is different from last processed
-    // 3. Not streaming AND this is first time seeing this content
     const isStreaming = artifactsContext.isSubmitting;
     const wasStreaming = lastIsSubmittingRef.current;
     const streamingJustCompleted = wasStreaming && !isStreaming;
@@ -1711,15 +1560,16 @@ export function Artifact({
     const shouldUpdate =
       shouldProcess &&
         (isArtifactUpdateNode
-        ? // For updates: Process when:
-          // 1. Streaming just completed
+        ? // For updates: Process during streaming AND after streaming completes
           (streamingJustCompleted && hasContent) ||
-          // 2. Content changed while not streaming
+          // During streaming: Process if content changed
+          (isStreaming && lastContent.current !== content && hasContent) ||
+          // After streaming: Process if content changed
           (!isStreaming && lastContent.current !== content && hasContent) ||
-          // 3. First time seeing content (lastContent not set)
-          (!isStreaming && !lastContent.current && hasContent) ||
-          // 4. After page refresh - we have content but haven't processed this message yet
-          (!isStreaming && hasContent && lastProcessedMessageId.current !== messageId)
+          // First time seeing content (lastContent not set)
+          (!lastContent.current && hasContent) ||
+          // After page refresh - we have content but haven't processed this message yet
+          (hasContent && lastProcessedMessageId.current !== messageId)
         : // For regular artifacts: trigger on key/message change OR content change
           lastUpdateKey.current !== updateKey ||
           lastContent.current !== content ||

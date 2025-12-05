@@ -1,22 +1,23 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import React from 'react';
 import * as Tabs from '@radix-ui/react-tabs';
-import type { SandpackPreviewRef, CodeEditorRef } from '@codesandbox/sandpack-react';
+import type { SandpackPreviewRef } from '@codesandbox/sandpack-react/unstyled';
+import type { CodeEditorRef } from '@codesandbox/sandpack-react';
 import type { Artifact } from '~/common';
-import { useEditorContext, useArtifactsContext } from '~/Providers';
-import { useChatContext } from '~/Providers';
+import { useCodeState } from '~/Providers/EditorContext';
+import { useArtifactsContext, useChatContext } from '~/Providers';
 import useArtifactProps from '~/hooks/Artifacts/useArtifactProps';
 import { useAutoScroll } from '~/hooks/Artifacts/useAutoScroll';
 import { ArtifactCodeEditor } from './ArtifactCodeEditor';
 import { useGetStartupConfig } from '~/data-provider';
 import { ArtifactPreview } from './ArtifactPreview';
-import { cn } from '~/utils';
 import { useRecoilState } from 'recoil';
 import { useSubmitMessage } from '~/hooks';
 import { artifactsState } from '~/store/artifacts';
 import { artifactCache } from './ArtifactCache';
 import {
   applyAllPartialUpdates,
+  applyPartialUpdate,
   ensureArtifactCacheHydrated,
 } from '~/hooks/Artifacts/useArtifactUtlis';
 
@@ -25,14 +26,16 @@ export default function ArtifactTabs({
   isMermaid,
   editorRef,
   previewRef,
+  isSharedConvo,
 }: {
   artifact: Artifact;
   isMermaid: boolean;
   editorRef: React.MutableRefObject<CodeEditorRef>;
   previewRef: React.MutableRefObject<SandpackPreviewRef>;
+  isSharedConvo?: boolean;
 }) {
   const { isSubmitting } = useArtifactsContext();
-  const { currentCode, setCurrentCode } = useEditorContext();
+  const { currentCode, setCurrentCode } = useCodeState();
   const { data: startupConfig } = useGetStartupConfig();
   const { latestMessage: _latestMessage } = useChatContext();
   const [_artifacts, _setArtifacts] = useRecoilState(artifactsState);
@@ -72,7 +75,6 @@ export default function ArtifactTabs({
   }, [isSubmitting]);
 
   // IMPORTANT: On refresh, reconstruct artifact by applying all updates to the base
-  // CRITICAL: Don't recompute during streaming to prevent shaking
   const lastComputedIdRef = useRef<string | null>(null);
   const lastMergedResultRef = useRef<Artifact | null>(null);
   
@@ -88,6 +90,13 @@ export default function ArtifactTabs({
       streamingCompleteTrigger, // Used to force re-merge when streaming completes
     });
 
+    if (isMessageStreaming || isSubmitting) {
+      // Return raw artifact content during streaming - no merge, no cache
+      return stateArtifact;
+    }
+
+    // CRITICAL: Only recompute if artifact ID actually changed
+    // Use cache if same artifact and we have a previous result
     if (stateArtifact?.id === lastComputedIdRef.current && lastMergedResultRef.current) {
       console.log('✅ [mergedArtifact] Returning cached result for:', stateArtifact?.id);
       return lastMergedResultRef.current;
@@ -98,19 +107,37 @@ export default function ArtifactTabs({
       return stateArtifact;
     }
 
-    //if (!latestMessage?.content || !latestMessage.messageId) return;
     // If this is an update artifact, we need to merge all updates up to this point
     if (stateArtifact.isUpdate) {
       console.log('🔄 [mergedArtifact] This is an UPDATE artifact, need to merge');
-      // CRITICAL: Update artifacts already have the SAME identifier as their base
-      // Don't split it - just use it directly (splitting would break identifiers with underscores)
       const baseIdentifier = stateArtifact.identifier;
 
-      // Find the original (base) artifact by matching the base identifier
-      const originalArtifact = _artifacts
-        ? Object.values(_artifacts).find((a) => a && a.identifier === baseIdentifier && !a.isUpdate)
-        : undefined;
-      console.log('🔍 [mergedArtifact] Base artifact search:', {
+      // This allows incremental merging instead of always going back to original base
+      const currentUpdateIndex =
+        stateArtifact.index ?? parseInt(stateArtifact.id?.match(/_update(\d+)_/)?.[1] || '0', 10);
+
+      // Get all artifacts with same identifier, sorted by index/time
+      const relatedArtifacts = _artifacts
+        ? Object.values(_artifacts)
+            .filter((a) => a && a.identifier === baseIdentifier)
+            .sort((a, b) => {
+              const _indexA = a?.index ?? parseInt(a?.id?.match(/_update(\d+)_/)?.[1] || '-1', 10);
+              const _indexB = b?.index ?? parseInt(b?.id?.match(/_update(\d+)_/)?.[1] || '-1', 10);
+              return _indexB - _indexA; // Descending: newest first
+            })
+        : [];
+      // Find the most recent artifact BEFORE this one (highest index less than current)
+      // This could be update(N-1) or the base artifact
+      const previousArtifact = relatedArtifacts.find((a) => {
+        //if (!a?.isUpdate) return true; // Base artifact is always a candidate
+        const artifactIndex = a?.index ?? parseInt(a?.id?.match(/_update(\d+)_/)?.[1] || '0', 10);
+        return artifactIndex < currentUpdateIndex;
+      });
+
+      // Fallback: if no previous update found, use base artifact
+      const originalArtifact = previousArtifact || relatedArtifacts.find((a) => a && !a.isUpdate);
+
+      console.log('🔍 [mergedArtifact] Previous artifact search:', {
         baseIdentifier,
         originalArtifactFound: !!originalArtifact,
         originalArtifactId: originalArtifact?.id,
@@ -122,47 +149,43 @@ export default function ArtifactTabs({
       // CRITICAL: ALWAYS merge if we have a base artifact, don't check if content differs
       // On refresh, artifact.content might be empty/partial, so we need to merge regardless
       if (originalArtifact && originalArtifact.content) {
-        // Merge all updates up to and including this artifact
-        // console.log('🟢🟢🟢 [CALL SITE 2: ArtifactTabs.tsx Line ~120] CALLING merge function:', {
-        //   location: 'ArtifactTabs.tsx line ~120 - Tab Display',
-        //   reason: 'Displaying merged content in tab',
-        //   baseArtifactId: originalArtifact.id,
-        //   targetArtifactId: stateArtifact.id,
-        //   baseContentLength: originalArtifact.content.length,
-        // allArtifactsCount: _artifacts ? Object.keys(_artifacts).length : 0,
-        //   isStreaming: isInitialLoad || !!isMessageStreaming,
-        //   isInitialLoad,
-        //   conversationId: null,
-        //   willUseApplyAll: isInitialLoad,
-        //   willUseApplyPartial: !isInitialLoad,
-        //   STACK_TRACE: new Error().stack?.split('\n').slice(1, 5).join('\n'),
-        // });
 
-        const mergedContent = !isMessageStreaming
-          ? applyAllPartialUpdates(
-          originalArtifact.content ?? '',
-          _artifacts,
+        // Strategy 1: Check cache for previous artifact (already has merged content)
+        // Strategy 2: If no cache, use originalArtifact.content (could be previous update or base)
+        let baseContentForMerge = originalArtifact.content ?? '';
+
+        // If the previous artifact is an UPDATE artifact, check if it has cached merged content
+        if (previousArtifact?.isUpdate) {
+          const cachedPrevious = artifactCache.getContent(previousArtifact.id);
+          if (cachedPrevious && cachedPrevious.content && cachedPrevious.content.trim() !== '') {
+            console.log('✅ Using cached merged content from previous update:', {
+              previousArtifactId: previousArtifact.id,
+              cachedContentLength: cachedPrevious.content.length,
+              BENEFIT: 'Incremental merge - building on previous merged result',
+            });
+            baseContentForMerge = cachedPrevious.content;
+          } else {
+            console.log('⚠️ Previous update has no cached content - using raw content:', {
+              previousArtifactId: previousArtifact.id,
+              willNeedFullMerge: true,
+            });
+            // Fallback: use raw content from previous artifact
+            baseContentForMerge = previousArtifact.content ?? originalArtifact.content ?? '';
+          }
+        } else {
+          console.log('ℹ️ Previous artifact is BASE - using its content directly:', {
+            baseArtifactId: originalArtifact.id,
+          });
+        }
+
+        // Now apply THIS update to the base content (which could be cached previous merged result)
+        const mergedContent = applyPartialUpdate(
+          baseContentForMerge, // ✅ Use cached previous merged result OR base
+          stateArtifact.content ?? '', // New update snippet
           stateArtifact.id,
-              false, // Not streaming during initial load
-              null, // conversationId not needed for display-only tabs
-            )
-          : (stateArtifact.content ?? originalArtifact.content ?? '');
-        // } else {
-        //   console.log('⚡ [Update Mode] Using applyPartialUpdate for single update');
-        //   mergedContent = applyPartialUpdate(
-        //     originalArtifact.content ?? '',
-        //     stateArtifact.content ?? '',
-        //     stateArtifact.id,
-        //     Object.keys(_artifacts).length,
-        //     _artifacts,
-        //   );
-        // }
-
-        console.log('✅ [mergedArtifact] applyAllPartialUpdates returned:', {
-          mergedContentLength: mergedContent?.length,
-          mergedContentPreview: mergedContent?.substring(0, 200),
-          isEmptyOrOriginal: mergedContent === originalArtifact.content,
-        });
+          Object.keys(_artifacts).length,
+          _artifacts,
+        );
 
         const result = {
           ...stateArtifact,
@@ -279,14 +302,6 @@ export default function ArtifactTabs({
       //});
       return;
     }
-
-    // console.log('💾 [ArtifactTabs] Saving merged content to cache:', {
-    //   artifactId: mergedArtifact.id,
-    //   isUpdate: mergedArtifact.isUpdate,
-    //   contentLength: mergedArtifact.content.length,
-    //   isStreaming: isMessageStreaming,
-    // });
-
     // Update timestamp tracker
     lastSaveTimestampRef.current.set(mergedArtifact.id, Date.now());
 
@@ -435,10 +450,8 @@ export default function ArtifactTabs({
   // CRITICAL: On page refresh, displayArtifact has the freshly computed merged content
   // from getDisplayArtifact(), which should take priority over stale mergedArtifact
   // Use displayArtifact if it has isMerged=true (indicating fresh merge from getDisplayArtifact)
-  const content =
-    displayArtifact?.isMerged && displayArtifact?.content
-      ? displayArtifact.content
-      : (mergedArtifact?.content ?? displayArtifact?.content ?? '');
+  // HOWEVER: During streaming and normal operation, use mergedArtifact.content directly
+  const content = mergedArtifact?.content ?? displayArtifact?.content ?? '';
 
   const props = useArtifactProps({ artifact: displayArtifact });
   const files = { ...props.files };
@@ -449,14 +462,10 @@ export default function ArtifactTabs({
   // Override the main file's content with the merged content for the code editor
   if (files && fileKey && content) {
     files[fileKey] = content;
-    console.log('📝 [ArtifactTabs] Set files[fileKey] to content:', {
-      fileKey,
-      contentLength: content.length,
-      contentPreview: content.substring(0, 150),
-    });
   }
   const contentRef = useRef<HTMLDivElement>(null);
   useAutoScroll({ ref: contentRef, content, isSubmitting });
+
 
   // Helper function to get language from artifact type
   const getLanguageFromType = (type?: string): string => {
@@ -468,47 +477,26 @@ export default function ArtifactTabs({
   // Handle selection submissions from the CodeEditor component
   const handleSelectionSubmit = useCallback(
     (messageData: any) => {
-      const systemInstructions = `⚠️ CRITICAL ARTIFACT UPDATE MODE ⚠️
+      const systemInstructions = `You are helping edit code in an artifact. 
+When providing your updated code, use the artifactupdate directive format:
 
-You MUST return ONLY the selected code snippet being changed - NOT the full document!
-
-FORMAT:
 :::artifactupdate{identifier="${artifact.identifier}" type="${artifact.type || 'text/html'}" title="${artifact.title || 'Updated Artifact'}"}
 \`\`\`${getLanguageFromType(artifact.type)}
-<ONLY THE SELECTED/CHANGED CODE - NO OTHER CODE>
+[your updated code here]
 \`\`\`
 :::
 
-❌ WRONG EXAMPLE (User asks "change background color to red"):
-:::artifactupdate{...}
-\`\`\`html
-<!DOCTYPE html>
-<html>
-<head>...</head>
-<body style="background: red;">...</body>
-</html>
-\`\`\`
-:::
-
-✅ CORRECT EXAMPLE (User asks "change background color to red"):
-:::artifactupdate{...}
-\`\`\`html
-<body style="background: red;">
-\`\`\`
-:::
-
-🚨 ABSOLUTE RULES - NO EXCEPTIONS:
-1. Return ONLY the code lines/section user selected or wants to change
-2. DO NOT return the full HTML/CSS/JS document
-3. DO NOT include <!DOCTYPE>, <html>, <head>, or any unchanged sections
-4. DO NOT add any code that wasn't in the user's selection
-5. Match the user's selection EXACTLY - if they selected 3 lines, return ~3 lines
-6. Think of this as "find and replace" - return ONLY the replacement text
-7. NO explanations before or after the code block
-8. IDENTIFIER: Use ${artifact.identifier || artifact.id} exactly as shown
-
-IF YOU RETURN A FULL DOCUMENT INSTEAD OF A SNIPPET, THE SYSTEM WILL BREAK!
-The code expects a small snippet to merge into the existing document, NOT a full document.`;
+CRITICAL RULES (follow in this order):
+1. IDENTIFIER: Use ${artifact.identifier || artifact.id} exactly as-is
+2. SCOPE: Return ONLY the code section being changed, NEVER the full artifact OR ANY OTHER CODE. It is replacing the existing content in the artifact. ** NO EXTRA CODE!**
+3. CONTEXT: Read entire previous artifact to understand change location, then output only updates
+4. NO EXPLANATIONS: Zero preamble text before ::artifactupdate marker
+5. PRESERVE FORMATTING: Match original spacing, indentation, line breaks exactly
+6. NO DUPLICATION: Only include code being modified; never repeat existing unchanged code
+7. INSERTION READY: Format output so it's directly replaceable at the specified location
+8. ASSUME YES: Make decisions without asking user confirmation
+9. VALIDATION: Ensure updates align logically with user request and artifact type
+`;
 
       submitMessage({
         text: messageData.message,
