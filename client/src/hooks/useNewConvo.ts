@@ -95,7 +95,6 @@ const useNewConvo = (index = 0) => {
           (activePreset?.presetId != null &&
             activePreset.presetId &&
             activePreset.presetId === defaultPreset?.presetId);
-
         if (buildDefaultConversation) {
           let defaultEndpoint = getDefaultEndpoint({
             convoSetup: useDefaultLastModel ? conversation : (activePreset ?? conversation),
@@ -167,6 +166,7 @@ const useNewConvo = (index = 0) => {
             lastConversationSetup: activePreset as TConversation,
             endpoint: defaultEndpoint,
             models,
+            index,
           });
         }
 
