@@ -131,7 +131,7 @@ router.get('/', async function (req, res) {
         if (!mcpManager) {
           return;
         }
-        const mcpServers = mcpManager.getAllServerConfigs();
+        const mcpServers = mcpManager.getAllServers();
         if (!mcpServers) return;
         const oauthServers = mcpManager.getOAuthServers();
         for (const serverName in mcpServers) {
