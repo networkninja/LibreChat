@@ -9,8 +9,13 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkDirective from 'remark-directive';
 import type { Pluggable } from 'unified';
 import { Citation, CompositeCitation, HighlightedText } from '~/components/Web/Citation';
-import { Artifact, ArtifactUpdate, artifactPlugin } from '~/components/Artifacts/Artifact';
-import { ArtifactProvider, CodeBlockProvider } from '~/Providers';
+import {
+  Artifact,
+  ArtifactUpdate,
+  artifactPlugin,
+  Selection,
+} from '~/components/Artifacts/Artifact';
+import { ArtifactProvider, ArtifactsProvider, CodeBlockProvider } from '~/Providers';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { langSubset, preprocessLaTeX } from '~/utils';
 import { unicodeCitation } from '~/components/Web';

@@ -22,6 +22,15 @@ const {
 } = require('./Message');
 const { getConvoTitle, getConvo, saveConvo, deleteConvos } = require('./Conversation');
 const { getPreset, getPresets, savePreset, deletePresets } = require('./Preset');
+const {
+  saveArtifactCache,
+  getArtifactCache,
+  getArtifactCacheEntry,
+  deleteArtifactCache,
+  deleteAllUserArtifactCache,
+  getConversationArtifactCache,
+  cleanupExpiredArtifactCache,
+} = require('./ArtifactCache');
 const { File } = require('~/db/models');
 
 const seedDatabase = async () => {
@@ -59,6 +68,14 @@ module.exports = {
   getPresets,
   savePreset,
   deletePresets,
+
+  saveArtifactCache,
+  getArtifactCache,
+  getArtifactCacheEntry,
+  deleteArtifactCache,
+  deleteAllUserArtifactCache,
+  getConversationArtifactCache,
+  cleanupExpiredArtifactCache,
 
   Files: File,
 };

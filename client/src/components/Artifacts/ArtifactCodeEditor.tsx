@@ -88,7 +88,7 @@ const CodeEditor = memo(
       endColumn: number;
     } | null>(null);
 
-  const customPromptInputRef = useRef<HTMLTextAreaElement>(null);
+    const customPromptInputRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
       if (customPromptOpen && customPromptInputRef.current) {
@@ -849,6 +849,7 @@ export const ArtifactCodeEditor = function ({
     }
     return {
       ...sharedOptions,
+      activeFile: '/' + fileKey,
       bundlerURL: template === 'static' ? config.staticBundlerURL : config.bundlerURL,
     };
   }, [config, template, fileKey]);

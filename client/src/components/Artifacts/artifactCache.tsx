@@ -58,35 +58,244 @@ export const artifactCache = {
   _contentCache: new Map<string, ArtifactContentCache>(),
   _updateLocationCache: new Map<string, ArtifactUpdateLocation>(),
   _databaseSyncTimers: new Map<string, NodeJS.Timeout>(),
+  _saveToStorageTimer: null as NodeJS.Timeout | null, // Timer for debounced storage saves
+  _isDirty: false, // Track if cache has unsaved changes
 
-  // Persistence helper methods
-  _saveToStorage: () => {
+  // Storage limits (in bytes)
+  _MAX_STORAGE_SIZE: 4 * 1024 * 1024, // 4MB limit (leaving headroom under 5MB quota)
+  _MAX_CONTENT_ENTRIES: 50, // Maximum number of content entries to keep
+  _MAX_SELECTION_AGE: 24 * 60 * 60 * 1000, // 24 hours for selections
+  _MAX_CONTENT_AGE: 7 * 24 * 60 * 60 * 1000, // 7 days for content
+  _STORAGE_SAVE_DEBOUNCE_MS: 2000, // Debounce localStorage saves by 2 seconds
+
+  // Calculate size of data to be stored
+  _calculateStorageSize: (data: any): number => {
+    try {
+      return new Blob([JSON.stringify(data)]).size;
+    } catch {
+      return JSON.stringify(data).length * 2; // Rough estimate (UTF-16)
+    }
+  },
+
+  // Prune old entries to fit within storage limits
+  _pruneOldEntries: () => {
+    const now = Date.now();
+
+    // 1. Remove old selections (older than 24 hours)
+    console.log('🧹 [ArtifactCache] Pruning old selections...');
+    let prunedSelections = 0;
+    for (const [key, value] of artifactCache._selectionCache.entries()) {
+      if (value.timestamp && now - value.timestamp > artifactCache._MAX_SELECTION_AGE) {
+        artifactCache._selectionCache.delete(key);
+        prunedSelections++;
+      }
+    }
+
+    // 2. Remove old content entries (older than 7 days) or keep only the N most recent
+    console.log('🧹 [ArtifactCache] Pruning old content entries...');
+    const contentEntries = Array.from(artifactCache._contentCache.entries());
+    let prunedContent = 0;
+
+    // Remove old entries
+    for (const [key, value] of contentEntries) {
+      if (value.timestamp && now - value.timestamp > artifactCache._MAX_CONTENT_AGE) {
+        artifactCache._contentCache.delete(key);
+        prunedContent++;
+      }
+    }
+
+    // If still too many entries, keep only the N most recent
+    const remainingContent = Array.from(artifactCache._contentCache.entries());
+    if (remainingContent.length > artifactCache._MAX_CONTENT_ENTRIES) {
+      // Sort by timestamp (most recent first)
+      remainingContent.sort((a, b) => b[1].timestamp - a[1].timestamp);
+
+      // Remove oldest entries beyond the limit
+      for (let i = artifactCache._MAX_CONTENT_ENTRIES; i < remainingContent.length; i++) {
+        artifactCache._contentCache.delete(remainingContent[i][0]);
+        prunedContent++;
+      }
+    }
+
+    console.log('✅ [ArtifactCache] Pruning complete:', {
+      prunedSelections,
+      prunedContent,
+      remainingSelections: artifactCache._selectionCache.size,
+      remainingContent: artifactCache._contentCache.size,
+    });
+
+    return { prunedSelections, prunedContent };
+  },
+
+  // CRITICAL: Debounced version of _saveToStorage to prevent excessive writes
+  // This batches rapid cache updates into a single localStorage write
+  _debouncedSaveToStorage: () => {
+    // Mark cache as dirty
+    artifactCache._isDirty = true;
+
+    // Clear existing timer
+    if (artifactCache._saveToStorageTimer) {
+      clearTimeout(artifactCache._saveToStorageTimer);
+    }
+
+    // Set new timer
+    artifactCache._saveToStorageTimer = setTimeout(() => {
+      if (artifactCache._isDirty) {
+        console.log('💾 [ArtifactCache] Debounced save triggered');
+        artifactCache._saveToStorageImmediate();
+        artifactCache._isDirty = false;
+      }
+      artifactCache._saveToStorageTimer = null;
+    }, artifactCache._STORAGE_SAVE_DEBOUNCE_MS);
+  },
+
+  // Immediate save (no debounce) - use sparingly
+  _saveToStorageImmediate: () => {
     try {
       const selectionData = Array.from(artifactCache._selectionCache.entries());
       const contentData = Array.from(artifactCache._contentCache.entries());
       const updateLocationData = Array.from(artifactCache._updateLocationCache.entries());
 
-      // console.log('💾 [ArtifactCache] Saving to localStorage (DETAILS):', {
+      // Calculate total size
+      const selectionSize = artifactCache._calculateStorageSize(selectionData);
+      const contentSize = artifactCache._calculateStorageSize(contentData);
+      const updateLocationSize = artifactCache._calculateStorageSize(updateLocationData);
+      const totalSize = selectionSize + contentSize + updateLocationSize;
+
+      // console.log('💾 [ArtifactCache] Saving to localStorage:', {
       //   selections: selectionData.length,
       //   content: contentData.length,
       //   updateLocations: updateLocationData.length,
-      //   selectionKeys: selectionData.map(([key]) => key),
-      //   selectionDetails: selectionData.map(([key, val]) => ({
-      //     key,
-      //     artifactId: val.artifactId,
-      //     startLine: val.startLine,
-      //     endLine: val.endLine,
-      //     originalTextPreview: val.originalText?.substring(0, 50),
-      //   })),
+      //   selectionSize: `${(selectionSize / 1024).toFixed(2)} KB`,
+      //   contentSize: `${(contentSize / 1024).toFixed(2)} KB`,
+      //   updateLocationSize: `${(updateLocationSize / 1024).toFixed(2)} KB`,
+      //   totalSize: `${(totalSize / 1024).toFixed(2)} KB`,
+      //   maxSize: `${(artifactCache._MAX_STORAGE_SIZE / 1024).toFixed(2)} KB`,
+      //   utilizationPercent: `${((totalSize / artifactCache._MAX_STORAGE_SIZE) * 100).toFixed(1)}%`,
       // });
 
-      localStorage.setItem('artifactCache_selections', JSON.stringify(selectionData));
-      localStorage.setItem('artifactCache_content', JSON.stringify(contentData));
-      localStorage.setItem('artifactCache_updateLocations', JSON.stringify(updateLocationData));
+      // PROACTIVE PRUNING: Clean up BEFORE saving if we're using >60% of quota
+      // This prevents quota exceeded errors before they happen
+      const utilizationPercent = (totalSize / artifactCache._MAX_STORAGE_SIZE) * 100;
+      if (utilizationPercent > 60) {
+        console.warn(
+          `⚠️ [ArtifactCache] Cache utilization is ${utilizationPercent.toFixed(1)}% (>60%), proactive pruning...`,
+        );
+        artifactCache._pruneOldEntries();
 
-      // console.log('✅ [ArtifactCache] Successfully saved to localStorage');
-    } catch (error) {
-      console.error('❌ [ArtifactCache] Failed to save to localStorage:', error);
+        // Recalculate after pruning
+        const prunedSelectionData = Array.from(artifactCache._selectionCache.entries());
+        const prunedContentData = Array.from(artifactCache._contentCache.entries());
+        const prunedUpdateLocationData = Array.from(artifactCache._updateLocationCache.entries());
+
+        const newTotalSize =
+          artifactCache._calculateStorageSize(prunedSelectionData) +
+          artifactCache._calculateStorageSize(prunedContentData) +
+          artifactCache._calculateStorageSize(prunedUpdateLocationData);
+
+        console.log('✅ [ArtifactCache] Proactive pruning complete:', {
+          oldSize: `${(totalSize / 1024).toFixed(2)} KB`,
+          newSize: `${(newTotalSize / 1024).toFixed(2)} KB`,
+          saved: `${((totalSize - newTotalSize) / 1024).toFixed(2)} KB`,
+          newUtilization: `${((newTotalSize / artifactCache._MAX_STORAGE_SIZE) * 100).toFixed(1)}%`,
+        });
+
+        // Use pruned data for saving
+        localStorage.setItem('artifactCache_selections', JSON.stringify(prunedSelectionData));
+        localStorage.setItem('artifactCache_content', JSON.stringify(prunedContentData));
+        localStorage.setItem(
+          'artifactCache_updateLocations',
+          JSON.stringify(prunedUpdateLocationData),
+        );
+        console.log(
+          '✅ [ArtifactCache] Successfully saved to localStorage (after proactive pruning)',
+        );
+        return;
+      }
+
+      // If size exceeds limit, prune old entries
+      if (totalSize > artifactCache._MAX_STORAGE_SIZE) {
+        console.warn('⚠️ [ArtifactCache] Storage size exceeds limit, pruning old entries...');
+        artifactCache._pruneOldEntries();
+
+        // Recalculate data after pruning
+        const prunedSelectionData = Array.from(artifactCache._selectionCache.entries());
+        const prunedContentData = Array.from(artifactCache._contentCache.entries());
+        const prunedUpdateLocationData = Array.from(artifactCache._updateLocationCache.entries());
+
+        const newTotalSize =
+          artifactCache._calculateStorageSize(prunedSelectionData) +
+          artifactCache._calculateStorageSize(prunedContentData) +
+          artifactCache._calculateStorageSize(prunedUpdateLocationData);
+
+        console.log('✅ [ArtifactCache] After pruning:', {
+          oldSize: `${(totalSize / 1024).toFixed(2)} KB`,
+          newSize: `${(newTotalSize / 1024).toFixed(2)} KB`,
+          saved: `${((totalSize - newTotalSize) / 1024).toFixed(2)} KB`,
+        });
+
+        // Use pruned data for saving
+        localStorage.setItem('artifactCache_selections', JSON.stringify(prunedSelectionData));
+        localStorage.setItem('artifactCache_content', JSON.stringify(prunedContentData));
+        localStorage.setItem(
+          'artifactCache_updateLocations',
+          JSON.stringify(prunedUpdateLocationData),
+        );
+      } else {
+        // Save normally
+        localStorage.setItem('artifactCache_selections', JSON.stringify(selectionData));
+        localStorage.setItem('artifactCache_content', JSON.stringify(contentData));
+        localStorage.setItem('artifactCache_updateLocations', JSON.stringify(updateLocationData));
+      }
+
+      console.log('✅ [ArtifactCache] Successfully saved to localStorage');
+    } catch (error: any) {
+      // Handle QuotaExceededError
+      if (error?.name === 'QuotaExceededError' || error?.code === 22) {
+        console.error(
+          '❌ [ArtifactCache] QuotaExceededError - localStorage is full. Attempting emergency pruning...',
+        );
+
+        // Emergency pruning - remove more aggressively
+        artifactCache._pruneOldEntries();
+
+        // Try saving again with just selections and update locations (skip content)
+        try {
+          const selectionData = Array.from(artifactCache._selectionCache.entries());
+          const updateLocationData = Array.from(artifactCache._updateLocationCache.entries());
+
+          localStorage.setItem('artifactCache_selections', JSON.stringify(selectionData));
+          localStorage.setItem('artifactCache_updateLocations', JSON.stringify(updateLocationData));
+
+          // Clear content from localStorage (it's backed up in database anyway)
+          localStorage.removeItem('artifactCache_content');
+
+          console.warn(
+            '⚠️ [ArtifactCache] Emergency save: Saved selections and locations only. Content will be loaded from database.',
+          );
+        } catch (retryError) {
+          console.error('❌ [ArtifactCache] Emergency save also failed:', retryError);
+        }
+      } else {
+        console.error('❌ [ArtifactCache] Failed to save to localStorage:', error);
+      }
+    }
+  },
+
+  // Default save method - uses debouncing to prevent excessive writes
+  _saveToStorage: () => {
+    artifactCache._debouncedSaveToStorage();
+  },
+
+  // Force immediate save (bypass debounce) - use only when necessary
+  _flushStorageNow: () => {
+    if (artifactCache._saveToStorageTimer) {
+      clearTimeout(artifactCache._saveToStorageTimer);
+      artifactCache._saveToStorageTimer = null;
+    }
+    if (artifactCache._isDirty) {
+      artifactCache._saveToStorageImmediate();
+      artifactCache._isDirty = false;
     }
   },
 
@@ -184,7 +393,7 @@ export const artifactCache = {
     debounceMs: number = 1000,
   ) => {
     const key = `${artifactId}_${cacheType}`;
-    
+
     // Clear existing timer for this artifact+cacheType
     const existingTimer = artifactCache._databaseSyncTimers.get(key);
     if (existingTimer) {
@@ -324,69 +533,43 @@ export const artifactCache = {
   ) => {
     // Check if an entry already exists to preserve creationTime
     const existing = artifactCache._contentCache.get(artifactId);
-
-    // CRITICAL: Prevent overwriting full merged content with smaller snippet/delta
-    // Only save if the new content is LONGER than existing content
-    // This prevents snippets from overwriting full merged documents
-    if (existing && existing.content && existing.content.length > content.length) {
-      console.warn('⚠️ [setContent] SKIPPING save - new content is SMALLER than existing:', {
-        artifactId,
-        existingLength: existing.content.length,
-        newLength: content.length,
-        difference: existing.content.length - content.length,
-        existingPreview: existing.content.substring(0, 100),
-        newPreview: content.substring(0, 100),
-        REASON: 'Preventing snippet from overwriting full merged content',
-      });
-      return; // Don't overwrite full content with smaller snippet
-    }
-
-    // CRITICAL: For update artifacts, check if there's already a similar update with the same index
-    // This prevents duplicate update0, update1, etc. from being created when messageId changes
     if (artifactId.includes('_update')) {
-      // Extract the base identifier and update index from the artifactId
+      const baseIdentifier = artifactId.split('_update')[0];
       const updateIndexMatch = artifactId.match(/_update(\d+)_/);
-      if (updateIndexMatch) {
-        const updateIndex = updateIndexMatch[1];
-        const baseIdentifier = artifactId.split('_update')[0];
+      const currentUpdateIndex = updateIndexMatch ? parseInt(updateIndexMatch[1], 10) : -1;
 
-        // Find all cached updates with the same base identifier and update index
-        const similarUpdates = Array.from(artifactCache._contentCache.entries()).filter(
-          ([id, _data]) => {
-            return id.startsWith(baseIdentifier) && id.includes(`_update${updateIndex}_`);
-          },
-        );
+      // Find ALL updates for this base identifier
+      const allUpdates = Array.from(artifactCache._contentCache.entries()).filter(
+        ([id, _data]) => id.startsWith(baseIdentifier) && id.includes('_update'),
+      );
 
-        console.log('🔍 [setContent] Checking for duplicate update artifacts:', {
-          artifactId,
-          baseIdentifier,
-          updateIndex,
-          similarUpdatesCount: similarUpdates.length,
-          similarUpdateIds: similarUpdates.map(([id]) => id),
-        });
+      // console.log('🧹 [setContent] Cleaning old updates for base identifier:', {
+      //     artifactId,
+      //     baseIdentifier,
+      //   currentUpdateIndex,
+      //   totalUpdatesFound: allUpdates.length,
+      // });
 
-        // If we found a similar update, keep the one with the most recent content
-        if (similarUpdates.length > 0) {
-          const [existingId, existingData] = similarUpdates[0]; // Use first one found
+      // Remove ALL old updates for this identifier to save space
+      // We only need the LATEST merged result
+      let removedCount = 0;
+      allUpdates.forEach(([oldId]) => {
+        const oldIndexMatch = oldId.match(/_update(\d+)_/);
+        const oldIndex = oldIndexMatch ? parseInt(oldIndexMatch[1], 10) : -1;
 
-          // Compare timestamps - keep the newer one
-          if (existingData.timestamp && existingData.timestamp > Date.now() - 5000) {
-            // Existing was saved within last 5 seconds - probably same edit session
-            console.warn('⚠️ [setContent] REPLACING duplicate update artifact:', {
-              oldId: existingId,
-              newId: artifactId,
-              oldTimestamp: existingData.timestamp,
-              newTimestamp: Date.now(),
-              timeDiff: Date.now() - existingData.timestamp,
-            });
-
-            // Remove the old duplicate from cache
-            artifactCache._contentCache.delete(existingId);
-
-            // Also delete from database
-            artifactCache._deleteFromDatabase(existingId, 'content');
-          }
+        // Remove if it's an older update OR a duplicate of the same update
+        if (
+          oldIndex < currentUpdateIndex ||
+          (oldIndex === currentUpdateIndex && oldId !== artifactId)
+        ) {
+          console.log(`  🗑️ Removing old update: ${oldId} (index ${oldIndex})`);
+          artifactCache._contentCache.delete(oldId);
+          removedCount++;
         }
+      });
+
+      if (removedCount > 0) {
+        console.log(`✅ [setContent] Removed ${removedCount} old update(s) to free space`);
       }
     }
 
@@ -521,7 +704,7 @@ export const artifactCache = {
     artifactCache._contentCache.clear();
     artifactCache._updateLocationCache.clear();
     artifactCache._clearStorage(); // Clear from localStorage as well
-    
+
     // Clear all pending database sync timers
     for (const timer of artifactCache._databaseSyncTimers.values()) {
       clearTimeout(timer);
@@ -601,6 +784,10 @@ export const artifactCache = {
       '✅ [ArtifactCache.flushPendingSyncs] Flushed all pending database syncs:',
       promises.length,
     );
+
+    // CRITICAL: Also flush localStorage immediately (bypass debounce)
+    artifactCache._flushStorageNow();
+    console.log('✅ [ArtifactCache.flushPendingSyncs] Also flushed localStorage');
   },
 
   // Initialization method - call this when the app starts
@@ -672,10 +859,10 @@ export const artifactCache = {
 
             const existingSelection = artifactCache._selectionCache.get(entry.artifactId);
             if (!existingSelection) {
-            artifactCache._selectionCache.set(
-              entry.artifactId,
-              entry.data as ArtifactSelectionContext,
-            );
+              artifactCache._selectionCache.set(
+                entry.artifactId,
+                entry.data as ArtifactSelectionContext,
+              );
               console.log('✅ [ArtifactCache] Selection cached (NEWEST)');
             } else {
               console.log(
@@ -700,7 +887,7 @@ export const artifactCache = {
             // So the first content entry we see is the most recent one - keep it!
             const existingContent = artifactCache._contentCache.get(entry.artifactId);
             if (!existingContent) {
-            artifactCache._contentCache.set(entry.artifactId, entry.data as ArtifactContentCache);
+              artifactCache._contentCache.set(entry.artifactId, entry.data as ArtifactContentCache);
               console.log(
                 '✅ [ArtifactCache] Content cached (NEWEST). Current content cache size:',
                 artifactCache._contentCache.size,
@@ -813,10 +1000,10 @@ export const artifactCache = {
       artifactIdContainsUpdate: artifactId.includes('_update'),
     });
     const isActuallyUpdate = artifactId.includes('_update');
-    
+
     if (artifact.isUpdate && !isActuallyUpdate) {
       console.warn('⚠️ [getDisplayArtifact] FIXING incorrect isUpdate flag for base artifact:', {
-      artifactId,
+        artifactId,
         wasMarkedAsUpdate: true,
         shouldBeUpdate: false,
         FIXING: 'Treating as base artifact',
@@ -834,16 +1021,56 @@ export const artifactCache = {
           contentLength: artifact.content?.length,
           isMerged: true,
           age: Date.now() - (artifact.lastUpdateTime || 0),
-          SKIPPING_MERGE: 'Fresh merged content takes priority',
+          SKIPPING_CACHE_AND_MERGE: 'Fresh merged content takes priority',
         },
       );
       return artifact;
     }
 
     if (isActuallyUpdate) {
-      if (artifact.isMerged && artifact.content) {
-        // Silently return - already merged
-        return artifact;
+      const cached = artifactCache.getContent(artifactId);
+      const selection = artifactCache.getSelection(artifactId);
+
+      // Check if selection is NEWER than cached content (indicates pending merge needed)
+      const hasNewerSelection =
+        selection && cached && (selection.timestamp || 0) > (cached.timestamp || 0);
+
+      if (cached && cached.content && cached.content.trim() !== '' && !hasNewerSelection) {
+        console.log(
+          '💾 [getDisplayArtifact] CACHE HIT - Returning cached merged content for update artifact:',
+          artifactId,
+          {
+            cachedContentLength: cached.content.length,
+            cachedTimestamp: cached.timestamp,
+            selectionTimestamp: selection?.timestamp || 'none',
+            BENEFIT: 'Skipping merge - using cached result from previous merge',
+            source: 'IndexedDB cache',
+          },
+        );
+        return {
+          ...artifact,
+          content: cached.content,
+          isMerged: true,
+        };
+      } else {
+        // console.log(
+        //   hasNewerSelection
+        //     ? '🔄 [getDisplayArtifact] NEWER SELECTION DETECTED - Will recompute merge:'
+        //     : '❌ [getDisplayArtifact] CACHE MISS - No cached content found for update artifact:',
+        //   artifactId,
+        //   {
+        //     hasCached: !!cached,
+        //     hasSelection: !!selection,
+        //     cachedContentLength: cached?.content?.length || 0,
+        //     cachedTimestamp: cached?.timestamp || 'none',
+        //     selectionTimestamp: selection?.timestamp || 'none',
+        //     hasNewerSelection,
+        //     REASON: hasNewerSelection
+        //       ? 'Selection saved AFTER last merge - need fresh merge'
+        //       : 'No cached content available',
+        //     willComputeMerge: true,
+        //   },
+        // );
       }
       console.log(
         '🔄 [getDisplayArtifact] Update artifact needs merge (page refresh or stale), computing for:',
@@ -852,9 +1079,7 @@ export const artifactCache = {
           hasIsMergedFlag: artifact.isMerged,
           isRecentlyUpdated,
           age: artifact.lastUpdateTime ? Date.now() - artifact.lastUpdateTime : 'unknown',
-          REASON: isRecentlyUpdated
-            ? 'Recent but not marked as merged'
-            : 'Stale or page refresh - recomputing merge',
+          REASON: 'Cache miss - need to recompute merge from base',
         },
       );
 
@@ -886,6 +1111,7 @@ export const artifactCache = {
           artifactId,
           originalLength: baseArtifact.content?.length,
           mergedLength: mergedContent?.length,
+          WILL_CACHE: 'This result should be cached by caller',
         });
 
         return {
@@ -896,7 +1122,7 @@ export const artifactCache = {
       }
     }
 
-    // PRIORITY 3: Check cache (only for base artifacts or if merge failed)
+    // PRIORITY 4: Check cache for base artifacts
     const cached = artifactCache.getContent(artifactId);
     if (cached && cached.content) {
       console.log(
@@ -913,6 +1139,115 @@ export const artifactCache = {
     // PRIORITY 4: Fallback - return artifact as-is
     console.log('📄 [getDisplayArtifact] Returning artifact as-is:', artifactId);
     return artifact;
+  },
+
+  // Utility methods for manual cache management
+
+  /**
+   * Get current storage statistics
+   * @returns Object with size information and recommendations
+   */
+  getStorageStats: () => {
+    const selectionData = Array.from(artifactCache._selectionCache.entries());
+    const contentData = Array.from(artifactCache._contentCache.entries());
+    const updateLocationData = Array.from(artifactCache._updateLocationCache.entries());
+
+    const selectionSize = artifactCache._calculateStorageSize(selectionData);
+    const contentSize = artifactCache._calculateStorageSize(contentData);
+    const updateLocationSize = artifactCache._calculateStorageSize(updateLocationData);
+    const totalSize = selectionSize + contentSize + updateLocationSize;
+
+    const stats = {
+      entries: {
+        selections: selectionData.length,
+        content: contentData.length,
+        updateLocations: updateLocationData.length,
+      },
+      sizes: {
+        selections: selectionSize,
+        content: contentSize,
+        updateLocations: updateLocationSize,
+        total: totalSize,
+        max: artifactCache._MAX_STORAGE_SIZE,
+      },
+      formatted: {
+        selections: `${(selectionSize / 1024).toFixed(2)} KB`,
+        content: `${(contentSize / 1024).toFixed(2)} KB`,
+        updateLocations: `${(updateLocationSize / 1024).toFixed(2)} KB`,
+        total: `${(totalSize / 1024).toFixed(2)} KB`,
+        max: `${(artifactCache._MAX_STORAGE_SIZE / 1024).toFixed(2)} KB`,
+      },
+      utilization: {
+        percent: ((totalSize / artifactCache._MAX_STORAGE_SIZE) * 100).toFixed(1),
+        isNearLimit: totalSize > artifactCache._MAX_STORAGE_SIZE * 0.8, // >80%
+        isOverLimit: totalSize > artifactCache._MAX_STORAGE_SIZE,
+      },
+      recommendations: [] as string[],
+    };
+
+    // Add recommendations
+    if (stats.utilization.isOverLimit) {
+      stats.recommendations.push('⚠️ Cache is over limit! Run pruneCache() immediately.');
+    } else if (stats.utilization.isNearLimit) {
+      stats.recommendations.push('⚠️ Cache is near limit (>80%). Consider running pruneCache().');
+    } else {
+      stats.recommendations.push('✅ Cache size is healthy.');
+    }
+
+    if (contentData.length > artifactCache._MAX_CONTENT_ENTRIES) {
+      stats.recommendations.push(
+        `⚠️ Too many content entries (${contentData.length}/${artifactCache._MAX_CONTENT_ENTRIES}). Run pruneCache().`,
+      );
+    }
+
+    return stats;
+  },
+
+  /**
+   * Manually trigger cache pruning
+   * @returns Pruning results
+   */
+  pruneCache: () => {
+    console.log('🧹 [ArtifactCache.pruneCache] Manual cache pruning triggered...');
+    const result = artifactCache._pruneOldEntries();
+    artifactCache._saveToStorage();
+    console.log('✅ [ArtifactCache.pruneCache] Cache pruning complete:', result);
+    return result;
+  },
+
+  /**
+   * Get detailed breakdown of cache contents
+   * @returns Detailed cache information
+   */
+  getCacheBreakdown: () => {
+    const now = Date.now();
+
+    const selections = Array.from(artifactCache._selectionCache.entries()).map(([id, data]) => ({
+      id,
+      age: data.timestamp ? now - data.timestamp : null,
+      ageFormatted: data.timestamp
+        ? `${Math.floor((now - data.timestamp) / 1000 / 60)} mins`
+        : 'unknown',
+      size: artifactCache._calculateStorageSize(data),
+    }));
+
+    const content = Array.from(artifactCache._contentCache.entries()).map(([id, data]) => ({
+      id,
+      age: now - data.timestamp,
+      ageFormatted: `${Math.floor((now - data.timestamp) / 1000 / 60)} mins`,
+      size: artifactCache._calculateStorageSize(data),
+      contentLength: data.content?.length || 0,
+      source: data.source,
+    }));
+
+    return {
+      selections,
+      content,
+      totals: {
+        selectionsSize: selections.reduce((sum, s) => sum + s.size, 0),
+        contentSize: content.reduce((sum, c) => sum + c.size, 0),
+      },
+    };
   },
 };
 

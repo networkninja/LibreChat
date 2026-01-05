@@ -1,83 +1,83 @@
 import { artifactCache } from '~/components/Artifacts/ArtifactCache';
 // --- Sanitizer: removes duplicate closing tags, orphan style fragments, dangling tails, duplicated <p> blocks, and DUPLICATE DOCTYPE/HTML ---
-function sanitizeArtifactContent(html: string): string {
-  if (!html) return html;
-  let out = html;
+// function sanitizeArtifactContent(html: string): string {
+//   if (!html) return html;
+//   let out = html;
 
-  // CRITICAL: Remove ALL duplicate DOCTYPE declarations (keep only the first one)
-  const doctypeMatches = out.match(/<!DOCTYPE[^>]*>/gi);
-  if (doctypeMatches && doctypeMatches.length > 1) {
-    console.log('🧹 [sanitize] Found duplicate DOCTYPE declarations:', doctypeMatches.length);
-    // Keep only the first DOCTYPE, remove all others
-    const firstDoctype = doctypeMatches[0];
-    out = out.replace(/<!DOCTYPE[^>]*>/gi, ''); // Remove all
-    out = firstDoctype + out; // Add first one back at the start
-  }
+//   // CRITICAL: Remove ALL duplicate DOCTYPE declarations (keep only the first one)
+//   const doctypeMatches = out.match(/<!DOCTYPE[^>]*>/gi);
+//   if (doctypeMatches && doctypeMatches.length > 1) {
+//     console.log('🧹 [sanitize] Found duplicate DOCTYPE declarations:', doctypeMatches.length);
+//     // Keep only the first DOCTYPE, remove all others
+//     const firstDoctype = doctypeMatches[0];
+//     out = out.replace(/<!DOCTYPE[^>]*>/gi, ''); // Remove all
+//     out = firstDoctype + out; // Add first one back at the start
+//   }
 
-  // CRITICAL: Remove duplicate <html> opening tags (keep only the first one)
-  const htmlOpenMatches = out.match(/<html[^>]*>/gi);
-  if (htmlOpenMatches && htmlOpenMatches.length > 1) {
-    console.log('🧹 [sanitize] Found duplicate <html> opening tags:', htmlOpenMatches.length);
-    let foundFirst = false;
-    out = out.replace(/<html[^>]*>/gi, (match) => {
-      if (!foundFirst) {
-        foundFirst = true;
-        return match; // Keep first
-      }
-      return ''; // Remove duplicates
-    });
-  }
+//   // CRITICAL: Remove duplicate <html> opening tags (keep only the first one)
+//   const htmlOpenMatches = out.match(/<html[^>]*>/gi);
+//   if (htmlOpenMatches && htmlOpenMatches.length > 1) {
+//     console.log('🧹 [sanitize] Found duplicate <html> opening tags:', htmlOpenMatches.length);
+//     let foundFirst = false;
+//     out = out.replace(/<html[^>]*>/gi, (match) => {
+//       if (!foundFirst) {
+//         foundFirst = true;
+//         return match; // Keep first
+//       }
+//       return ''; // Remove duplicates
+//     });
+//   }
 
-  // Deduplicate closing tags
-  out = out.replace(/<\/body>\s*<\/body>/gi, '</body>').replace(/<\/html>\s*<\/html>/gi, '</html>');
+//   // Deduplicate closing tags
+//   out = out.replace(/<\/body>\s*<\/body>/gi, '</body>').replace(/<\/html>\s*<\/html>/gi, '</html>');
 
-  // CRITICAL: If there are multiple </html> tags, keep only the LAST one
-  const htmlCloseMatches = out.match(/<\/html>/gi);
-  if (htmlCloseMatches && htmlCloseMatches.length > 1) {
-    console.log('🧹 [sanitize] Found duplicate </html> closing tags:', htmlCloseMatches.length);
-    // Remove all but the last one
-    let count = 0;
-    const totalMatches = htmlCloseMatches.length;
-    out = out.replace(/<\/html>/gi, () => {
-      count++;
-      if (count < totalMatches) {
-        return ''; // Remove all except last
-      }
-      return '</html>'; // Keep last one
-    });
-  }
+//   // CRITICAL: If there are multiple </html> tags, keep only the LAST one
+//   const htmlCloseMatches = out.match(/<\/html>/gi);
+//   if (htmlCloseMatches && htmlCloseMatches.length > 1) {
+//     console.log('🧹 [sanitize] Found duplicate </html> closing tags:', htmlCloseMatches.length);
+//     // Remove all but the last one
+//     let count = 0;
+//     const totalMatches = htmlCloseMatches.length;
+//     out = out.replace(/<\/html>/gi, () => {
+//       count++;
+//       if (count < totalMatches) {
+//         return ''; // Remove all except last
+//       }
+//       return '</html>'; // Keep last one
+//     });
+//   }
 
-  // Remove orphan attribute/style fragment lines (e.g., "yle=\"...")
-  out = out
-    .split('\n')
-    .filter((l) => !/^\s*:?(y?le)="[^"]*$/.test(l.trim()))
-    .filter((l) => !/^(y?le)="[^"]*/.test(l.trim()))
-    .join('\n');
+//   // Remove orphan attribute/style fragment lines (e.g., "yle=\"...")
+//   out = out
+//     .split('\n')
+//     .filter((l) => !/^\s*:?(y?le)="[^"]*$/.test(l.trim()))
+//     .filter((l) => !/^(y?le)="[^"]*/.test(l.trim()))
+//     .join('\n');
 
-  // Cut off anything after final </html>
-  const htmlCloseIdx = out.toLowerCase().lastIndexOf('</html>');
-  if (htmlCloseIdx !== -1) {
-    out = out.slice(0, htmlCloseIdx + 7);
-  }
+//   // Cut off anything after final </html>
+//   const htmlCloseIdx = out.toLowerCase().lastIndexOf('</html>');
+//   if (htmlCloseIdx !== -1) {
+//     out = out.slice(0, htmlCloseIdx + 7);
+//   }
 
-  // Deduplicate identical <p> lines inside body
-  out = out.replace(/(<body[^>]*>)([\s\S]*?)(<\/body>)/i, (_, open, inner, close) => {
-    const seen = new Set<string>();
-    const cleaned = inner
-      .split('\n')
-      .filter((line) => {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('<p')) return true;
-        if (seen.has(trimmed)) return false;
-        seen.add(trimmed);
-        return true;
-      })
-      .join('\n');
-    return open + cleaned + close;
-  });
+//   // Deduplicate identical <p> lines inside body
+//   out = out.replace(/(<body[^>]*>)([\s\S]*?)(<\/body>)/i, (_, open, inner, close) => {
+//     const seen = new Set<string>();
+//     const cleaned = inner
+//       .split('\n')
+//       .filter((line) => {
+//         const trimmed = line.trim();
+//         if (!trimmed.startsWith('<p')) return true;
+//         if (seen.has(trimmed)) return false;
+//         seen.add(trimmed);
+//         return true;
+//       })
+//       .join('\n');
+//     return open + cleaned + close;
+//   });
 
-  return out;
-}
+//   return out;
+// }
 
 export async function ensureArtifactCacheHydrated(
   artifactId: string,
@@ -553,33 +553,164 @@ export function applyPartialUpdate(
       endColumn,
     });
 
-    console.log('✅ [VALIDATION PASSED] Original text matches - safe to apply update');
+    // NEW: If text doesn't match, search for it in nearby lines (±5 lines)
+    if (currentTextAtLocation !== cachedSelection.originalText) {
+      console.warn('⚠️ [VALIDATION] Text mismatch - searching nearby lines...', {
+        originalStartLine: startLine,
+        originalEndLine: endLine,
+        searchingRange: `${Math.max(0, startLine - 5)} to ${Math.min(lines.length - 1, endLine + 5)}`,
+      });
+
+      let foundMatch = false;
+      let newStartLine = startLine;
+      let newEndLine = endLine;
+      let newStartColumn = startColumn;
+      let newEndColumn = endColumn;
+
+      // Search in a window of ±5 lines
+      const searchWindowStart = Math.max(0, startLine - 5);
+      const searchWindowEnd = Math.min(lines.length - 1, endLine + 5);
+
+      for (let searchLine = searchWindowStart; searchLine <= searchWindowEnd; searchLine++) {
+        // Try to find the originalText starting at this line
+        if (startLine === endLine) {
+          // Single-line search
+          const line = lines[searchLine] || '';
+          const columnIndex = line.indexOf(cachedSelection.originalText);
+          
+          if (columnIndex !== -1) {
+            // Found it!
+            newStartLine = searchLine;
+            newEndLine = searchLine;
+            newStartColumn = columnIndex;
+            newEndColumn = columnIndex + cachedSelection.originalText.length;
+            foundMatch = true;
+            
+            console.log('✅ [VALIDATION] Found originalText at different location!', {
+              originalLine: startLine,
+              foundAtLine: searchLine,
+              lineOffset: searchLine - startLine,
+              originalColumn: startColumn,
+              foundAtColumn: columnIndex,
+              columnOffset: columnIndex - startColumn,
+            });
+            break;
+          }
+        } else {
+          // Multi-line search - check if the text spans multiple lines starting here
+          const searchEndLine = Math.min(lines.length - 1, searchLine + (endLine - startLine));
+          const potentialMatch = lines.slice(searchLine, searchEndLine + 1).join('\n');
+          
+          if (potentialMatch.includes(cachedSelection.originalText)) {
+            // Found it! Now find exact position
+            const firstLineText = lines[searchLine];
+            const matchStart = potentialMatch.indexOf(cachedSelection.originalText);
+            
+            // Calculate which line the match starts on
+            const beforeMatch = potentialMatch.substring(0, matchStart);
+            const newlinesBefore = (beforeMatch.match(/\n/g) || []).length;
+            const startLineOffset = newlinesBefore;
+            
+            newStartLine = searchLine + startLineOffset;
+            newStartColumn = matchStart - beforeMatch.lastIndexOf('\n') - 1;
+            if (newStartColumn < 0) newStartColumn = matchStart; // First line case
+            
+            // Calculate end position
+            const textLines = cachedSelection.originalText.split('\n');
+            if (textLines.length === 1) {
+              newEndLine = newStartLine;
+              newEndColumn = newStartColumn + cachedSelection.originalText.length;
+            } else {
+              newEndLine = newStartLine + textLines.length - 1;
+              newEndColumn = textLines[textLines.length - 1].length;
+            }
+            
+            foundMatch = true;
+            console.log('✅ [VALIDATION] Found multi-line originalText at different location!', {
+              originalStartLine: startLine,
+              foundAtLine: newStartLine,
+              lineOffset: newStartLine - startLine,
+            });
+            break;
+          }
+        }
+      }
+
+      if (foundMatch) {
+        // Update the coordinates to use the corrected location
+        console.log('🔧 [VALIDATION] Correcting line/column numbers:', {
+          before: { startLine, endLine, startColumn, endColumn },
+          after: { startLine: newStartLine, endLine: newEndLine, startColumn: newStartColumn, endColumn: newEndColumn },
+          correction: 'Using corrected location for merge',
+        });
+        
+        // Update the local variables that will be used in the merge
+        // We need to reassign because they were declared with const
+        // So we'll use the new variables in the rest of the function
+        cachedSelection = {
+          ...cachedSelection,
+          startLine: newStartLine,
+          endLine: newEndLine,
+          startColumn: newStartColumn,
+          endColumn: newEndColumn,
+        };
+        
+        // Re-extract lines with corrected positions for validation
+        const correctedLines = originalContent.split('\n');
+        if (newStartLine === newEndLine) {
+          currentTextAtLocation = correctedLines[newStartLine]?.slice(newStartColumn, newEndColumn) || '';
+        } else {
+          const firstLinePart = correctedLines[newStartLine]?.slice(newStartColumn) || '';
+          const lastLinePart = correctedLines[newEndLine]?.slice(0, newEndColumn) || '';
+          const middleLines = correctedLines.slice(newStartLine + 1, newEndLine);
+          currentTextAtLocation = [firstLinePart, ...middleLines, lastLinePart].join('\n');
+        }
+
+        console.log('✅ [VALIDATION] Verified corrected location matches:', {
+          matches: currentTextAtLocation === cachedSelection.originalText,
+        });
+      } else {
+        console.error('❌ [VALIDATION] Could not find originalText in nearby lines!', {
+          searchedLines: `${searchWindowStart} to ${searchWindowEnd}`,
+          originalText: cachedSelection.originalText.substring(0, 100),
+          decision: 'Proceeding with original coordinates (may fail)',
+        });
+      }
+    } else {
+      console.log('✅ [VALIDATION PASSED] Original text matches - safe to apply update');
+    }
   } else if (skipValidation) {
     console.log('⏭️ [VALIDATION SKIPPED] Sequential update mode - validation disabled');
   } else {
     console.warn('⚠️ [VALIDATION SKIPPED] No originalText in selection context');
   }
+
+  // Re-extract line/column numbers (may have been corrected above)
+  const finalStartLine = cachedSelection.startLine;
+  const finalEndLine = cachedSelection.endLine;
+  const finalStartColumn = cachedSelection.startColumn;
+  const finalEndColumn = cachedSelection.endColumn;
   
   console.log('📝 [MERGE CONTENT] What we are replacing:', {
     originalContentPreview: originalContent.substring(0, 300),
     updateContentPreview: updateContent.substring(0, 300),
-    lineBeingModified: startLine,
-    currentLineContent: lines[startLine],
-    selectedTextInLine: lines[startLine]?.substring(startColumn, endColumn),
+    lineBeingModified: finalStartLine,
+    currentLineContent: lines[finalStartLine],
+    selectedTextInLine: lines[finalStartLine]?.substring(finalStartColumn, finalEndColumn),
   });
 
-  console.log('updateContent', updateContent, startLine, endLine, startColumn, endColumn);
+  console.log('updateContent', updateContent, finalStartLine, finalEndLine, finalStartColumn, finalEndColumn);
   console.log('updateLines', updateLines);
-  if (startLine === endLine) {
+  if (finalStartLine === finalEndLine) {
     // Single-line selection: replace only the substring
-    const line = lines[startLine] || '';
-    const before = line.slice(0, startColumn);
-    const after = line.slice(endColumn);
+    const line = lines[finalStartLine] || '';
+    const before = line.slice(0, finalStartColumn);
+    const after = line.slice(finalEndColumn);
 
     console.log('🎯 [SINGLE LINE UPDATE]:', {
-      lineNumber: startLine,
+      lineNumber: finalStartLine,
       originalLine: line,
-      selectedPortion: line.slice(startColumn, endColumn),
+      selectedPortion: line.slice(finalStartColumn, finalEndColumn),
       before: before,
       after: after,
       updateContent: updateContent,
@@ -606,26 +737,26 @@ export function applyPartialUpdate(
       });
 
       const newLines = [
-        ...lines.slice(0, startLine),
+        ...lines.slice(0, finalStartLine),
         firstLine,
         ...middleLines,
         lastLine,
-        ...lines.slice(startLine + 1),
+        ...lines.slice(finalStartLine + 1),
       ];
       console.log('Result lines:', newLines);
       const result = newLines.join('\n');
       return result.replace(/\n$/, ''); // Strip only the last newline
     }
 
-    lines[startLine] = before + updateContent + after;
-    console.log('lines after single line update artifactutls', lines[startLine], updateContent);
+    lines[finalStartLine] = before + updateContent + after;
+    console.log('lines after single line update artifactutls', lines[finalStartLine], updateContent);
     return lines.join('\n');
   } else {
     // Multi-line selection: replace partial start/end lines and all lines in between
-    const beforeStart = lines[startLine]?.slice(0, startColumn) || '';
-    const afterEnd = lines[endLine]?.slice(endColumn) || '';
-    const before = lines.slice(0, startLine);
-    const after = lines.slice(endLine + 1);
+    const beforeStart = lines[finalStartLine]?.slice(0, finalStartColumn) || '';
+    const afterEnd = lines[finalEndLine]?.slice(finalEndColumn) || '';
+    const before = lines.slice(0, finalStartLine);
+    const after = lines.slice(finalEndLine + 1);
 
     // console.log('🔧 [MULTI-LINE UPDATE]:', {
     //   startLine,
@@ -649,7 +780,7 @@ export function applyPartialUpdate(
     // CRITICAL: Check if start/end are at line boundaries (full line selection)
     // If startColumn is 0 and endColumn is at end of line, don't add prefix/suffix
     const isFullLineSelection =
-      startColumn === 0 && (afterEnd.trim() === '' || endColumn === (lines[endLine]?.length || 0));
+      finalStartColumn === 0 && (afterEnd.trim() === '' || finalEndColumn === (lines[finalEndLine]?.length || 0));
 
     console.log('🔍 [applyPartialUpdate] Selection type:', {
       isFullLineSelection,
@@ -810,13 +941,6 @@ export function applyAllPartialUpdates(
   // CRITICAL: The identifier is the SAME for base and update artifacts
   // Don't try to split it - just use it directly
   const targetBaseIdentifier = targetArtifact?.identifier;
-
-  // console.log('🔍 Determining base identifier for filtering updates:', {
-  //   targetArtifactId,
-  //   targetBaseIdentifier,
-  //   targetIdentifier: targetArtifact?.identifier,
-  //   targetIsUpdate: targetArtifact?.isUpdate,
-  // });
   console.log('artifacts', artifacts);
 
   // CRITICAL: Extract the target index from the target artifact if it's an update

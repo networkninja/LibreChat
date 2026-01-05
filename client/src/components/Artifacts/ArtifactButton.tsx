@@ -91,12 +91,20 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
           console.log('[ArtifactButton] Clicked:', { id: artifact.id, title: artifact.title });
 
           // CRITICAL: Check if this artifact belongs to the current conversation
-          // Artifacts are stored per-conversation, so clicking artifacts from other chats won't work
-          const artifactExistsInCurrentConversation = _artifacts?.[artifact.id] != null;
+          // Strategy 1: Check if artifact exists in state
+          const artifactExistsInState = _artifacts?.[artifact.id] != null;
+          // Strategy 2: Check conversationId match (if available)
+          const conversationIdMatches =
+            !artifact.conversationId || // No conversationId set (legacy artifacts)
+            !currentConversationId || // No current conversation (edge case)
+            artifact.conversationId === currentConversationId;
 
-          if (!artifactExistsInCurrentConversation) {
-            console.warn('⚠️ [ArtifactButton] Artifact does not belong to current conversation:', {
+          // CRITICAL FIX: If artifact exists in visibleArtifacts but not in state,
+          // it might just be a timing issue. Add it to state instead of blocking.
+          if (!artifactExistsInState) {
+            console.warn('⚠️ [ArtifactButton] Artifact not in state - checking conversationId:', {
               artifactId: artifact.id,
+              artifactConversationId: artifact.conversationId,
               currentConversationId,
               artifactInState: !!_artifacts?.[artifact.id],
               message:

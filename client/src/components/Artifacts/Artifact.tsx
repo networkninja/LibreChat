@@ -25,6 +25,80 @@ export const artifactPlugin: Pluggable = () => {
           };
         }
       }
+      console.log('node name', node.name, node);
+      // Handle selection directive
+      if (node.name === 'selection') {
+        console.log('🎯 [artifactPlugin] DETECTED :::selection::: directive!', {
+          nodeType: node.type,
+          nodeName: node.name,
+          hasChildren: Array.isArray(node.children),
+          childCount: Array.isArray(node.children) ? node.children.length : 0,
+          fullNode: JSON.stringify(node, null, 2),
+        });
+
+        // CRITICAL: Recursively extract ALL text from nested children
+        // The selection content can be in various node structures depending on how markdown is parsed
+        const extractTextRecursive = (n: any): string => {
+          let text = '';
+
+          if (n.type === 'text') {
+            text += n.value;
+          }
+
+          if (Array.isArray(n.children)) {
+            n.children.forEach((child: any) => {
+              text += extractTextRecursive(child);
+              // Add newlines between paragraphs for proper formatting
+              if (child.type === 'paragraph' || child.type === 'break') {
+                text += '\n';
+              }
+            });
+          }
+
+          return text;
+        };
+
+        const selectionText = extractTextRecursive(node);
+
+        console.log('📍 [artifactPlugin] Extracted selection text:', {
+          length: selectionText.length,
+          preview: selectionText.substring(0, 300),
+          fullText: selectionText,
+          CRITICAL: 'This text will be parsed by SelectionComponent',
+        });
+
+        // CRITICAL: Transform the directive node into an element node that ReactMarkdown will render
+        // Without this, ReactMarkdown won't know to render our Selection component
+        if (!node.data) {
+          node.data = {};
+        }
+        node.data.selectionText = selectionText;
+        node.data.hName = 'selection'; // This tells ReactMarkdown to use the 'selection' component
+        node.data.hProperties = node.data.hProperties || {};
+
+        console.log('✅ [artifactPlugin] Transformed node for Selection component:', {
+          nodeType: node.type,
+          nodeName: node.name,
+          hName: node.data.hName,
+          hasSelectionText: !!node.data.selectionText,
+          CRITICAL: 'ReactMarkdown will now render <Selection node={...} />',
+        });
+
+        // CRITICAL FIX: Pass selectionText as hProperties instead of just data
+        // ReactMarkdown doesn't preserve node.data, but DOES preserve hProperties as props
+        node.data.hProperties = {
+          ...node.data.hProperties,
+          selectionText: selectionText, // This becomes a prop on the React component
+        };
+
+        console.log('✅ [artifactPlugin] Added selectionText to hProperties (will become prop):', {
+          selectionTextLength: selectionText.length,
+          CRITICAL: 'SelectionComponent will receive this as props.selectionText',
+        });
+
+        return node;
+      }
+
       if (node.name !== 'artifact' && node.name !== 'artifactupdate') {
         return;
       }
@@ -118,8 +192,6 @@ export function Artifact({
   const conversationId =
     artifactsContext.conversationId || location.pathname.match(/\/c\/([^/]+)/)?.[1] || null;
 
-  // Removed unused variable artifactIndex
-
   const [_artifacts, setArtifacts] = useRecoilState(artifactsState);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [_visibleArtifacts, _setVisibleArtifacts] = useRecoilState(store.visibleArtifacts);
@@ -132,7 +204,9 @@ export function Artifact({
 
   // Track streaming state to save cache only when complete
   const lastIsSubmittingRef = useRef<boolean>(false);
-  const pendingCacheUpdates = useRef<Map<string, { content: string; metadata: any }>>(new Map()); 
+  const pendingCacheUpdates = useRef<
+    Map<string, { content: string; metadata: any; conversationId?: string; messageId?: string }>
+  >(new Map());
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -156,7 +230,7 @@ export function Artifact({
   useEffect(() => {
 
     const wasStreaming = lastIsSubmittingRef.current;
-    const isNowComplete = !artifactsContext.isSubmitting;
+    const isNowComplete = !artifactsContext.isSubmitting; // Changed from isStreaming to isSubmitting
 
     if (wasStreaming && isNowComplete) {
       console.log('✅✅✅ [Artifact] STREAMING COMPLETE (detected via context)', {
@@ -176,7 +250,7 @@ export function Artifact({
 
         setArtifacts((prevArtifacts) => {
           const updatedArtifacts = { ...prevArtifacts };
-          let hasUpdates = false;
+          const hasUpdates = false;
 
           // Find all update artifacts
           const updateArtifacts = Object.values(updatedArtifacts).filter((a) => a?.isUpdate);
@@ -220,7 +294,12 @@ export function Artifact({
               });
               return;
             }
+            // Process this recent update artifact
 
+            // Find the base artifact for this update
+            const _baseArtifact = Object.values(updatedArtifacts).find(
+              (a) => a && !a.isUpdate && a.identifier === artifact.identifier,
+            );
           });
 
           if (hasUpdates) {
@@ -242,43 +321,211 @@ export function Artifact({
         });
       }, 100); // 100ms delay to ensure React finishes processing streaming chunks
 
-      // Process all pending cache updates
+      // CRITICAL: Save pending selections FIRST (before content updates)
+      // Use async IIFE to handle await
+      (async () => {
+        console.log('🔍 [Artifact] Checking sessionStorage for pending selections...');
+        const sessionKeys = Object.keys(sessionStorage);
+        const pendingSelectionKeys = sessionKeys.filter((key) =>
+          key.startsWith('selection_pending_'),
+        );
+
+        console.log('📋 [Artifact] Found pending selection keys:', {
+          total: pendingSelectionKeys.length,
+          keys: pendingSelectionKeys,
+        });
+
+        // Process each pending selection
+        for (const pendingSelectionKey of pendingSelectionKeys) {
+          const pendingSelectionData = sessionStorage.getItem(pendingSelectionKey);
+          if (!pendingSelectionData) continue;
+
+          try {
+            const pendingSelection = JSON.parse(pendingSelectionData);
+            const messageId = pendingSelectionKey.replace('selection_pending_', '');
+
+            console.log('📍 [Artifact] Processing pending selection:', {
+              messageId,
+              selectionContext: pendingSelection,
+              SOURCE: 'sessionStorage (from :::selection::: directive)',
+            });
+
+            // Find the corresponding update artifact for this messageId
+            const matchingArtifacts = _artifacts
+              ? Object.values(_artifacts).filter(
+                  (a: any) => a?.messageId === messageId && a?.isUpdate === true,
+                )
+              : [];
+
+            if (matchingArtifacts.length > 0) {
+              const latestUpdate = matchingArtifacts[matchingArtifacts.length - 1] as any;
+              const artifactId = latestUpdate.id;
+
+              console.log('✅ [Artifact] Found matching update artifact for selection:', {
+                artifactId,
+                messageId,
+                CRITICAL: 'Saving selection to database NOW (streaming complete)',
+              });
+
+              // CRITICAL: Get conversationId - it MUST be available now
+              if (!conversationId) {
+                console.error('❌❌❌ [Artifact] CRITICAL: conversationId is MISSING!', {
+                  artifactId,
+                  messageId,
+                  BLOCKER: 'Cannot save to database without conversationId',
+                });
+                continue;
+              }
+
+              // Save selection to cache and database
+              const selectionSaveKeys: string[] = [artifactId];
+
+              // Add to cache directly
+              selectionSaveKeys.forEach((key) => {
+                const selectionData = {
+                  ...pendingSelection,
+                  conversationId: conversationId,
+                  timestamp: Date.now(),
+                };
+                artifactCache._selectionCache.set(key, selectionData);
+              });
+
+              // Save to localStorage
+              artifactCache._saveToStorage();
+              console.log('✅ [Artifact] Saved selection to localStorage');
+
+              // CRITICAL: Sync to database IMMEDIATELY (await for confirmation)
+              const primaryKey = selectionSaveKeys[0];
+              try {
+                const result = await artifactCache._syncToDatabase(
+                  primaryKey,
+                  'selection',
+                  {
+                    ...pendingSelection,
+                    conversationId: conversationId,
+                    timestamp: Date.now(),
+                  },
+                  {
+                    conversationId: conversationId,
+                    messageId: messageId,
+                  },
+                );
+
+                console.log('✅✅✅ [Artifact] Selection SUCCESSFULLY saved to DATABASE:', {
+                  artifactId: primaryKey,
+                  conversationId: conversationId,
+                  messageId: messageId,
+                  success: !!result,
+                  savedToMongoDB: true,
+                  result: result,
+                });
+
+                // Clear from sessionStorage ONLY after successful database save
+                sessionStorage.removeItem(pendingSelectionKey);
+                console.log(
+                  '🧹 [Artifact] Cleared selection from sessionStorage:',
+                  pendingSelectionKey,
+                );
+              } catch (error) {
+                console.error('❌❌❌ [Artifact] Selection database save FAILED:', {
+                  error,
+                  artifactId: primaryKey,
+                  conversationId,
+                  messageId,
+                  WILL_RETRY: 'Selection remains in sessionStorage for retry',
+                });
+              }
+            } else {
+              console.warn('⚠️ [Artifact] No matching update artifact found for selection:', {
+                messageId,
+                willRetryLater: 'Selection remains in sessionStorage',
+              });
+            }
+          } catch (error) {
+            console.error('❌ [Artifact] Failed to parse pending selection:', error);
+          }
+        }
+
+        // NOW process content updates AFTER selections are saved
       if (pendingCacheUpdates.current.size > 0) {
+          const artifactsToUpdate: Record<string, any> = {};
+
       pendingCacheUpdates.current.forEach((update, artifactId) => {
-          console.log('💾 [Artifact] Saving pending update to cache:', artifactId, {
-            conversationId,
-            hasConversationId: !!conversationId,
+            console.log('💾 [Artifact] Saving pending content update to cache:', artifactId, {
+              conversationId: update.conversationId,
+              messageId: update.messageId,
+              hasConversationId: !!update.conversationId,
             contentLength: update.content?.length || 0,
             contentPreview: update.content?.substring(0, 200) || 'NO CONTENT',
             isFullDocument:
               update.content?.includes('<!DOCTYPE') || update.content?.includes('<html>'),
             metadata: update.metadata,
-            FULL_CONTENT: update.content, // LOG ENTIRE CONTENT BEING SAVED
+              CRITICAL: 'Using conversationId captured when update was queued',
           });
 
           // CRITICAL: Pass conversationId in metadata for database sync
           artifactCache.setContent(artifactId, update.content, {
             ...update.metadata,
-            conversationId: conversationId || undefined, // Add conversationId for database sync
+              conversationId: update.conversationId, // Override after spread
+              messageId: update.messageId, // Override after spread
           });
 
-          console.log('✅ [Artifact] Cache save completed for:', artifactId);
+            //console.log('✅ [Artifact] Content cache save completed for:', artifactId);
+
+            // CRITICAL FIX: Also prepare to update the artifact in Recoil state
+            // This ensures the state has the FULL merged content, not just the snippet
+            artifactsToUpdate[artifactId] = {
+              content: update.content,
+              isMerged: true,
+            };
       });
 
       // Clear the pending updates
       pendingCacheUpdates.current.clear();
+          console.log('🧹 [Artifact] Cleared pending cache updates');
 
-      // CRITICAL: Flush any pending database syncs immediately after streaming completes
-      // This ensures all debounced writes happen now instead of waiting for the timer
-      console.log('🌊 [Artifact] Flushing pending database syncs...');
-      artifactCache.flushPendingSyncs().then(() => {
-        console.log('✅ [Artifact] All database syncs completed');
-      });
+          // CRITICAL FIX: Update all artifacts in Recoil state with full merged content
+          // This happens AFTER streaming completes, replacing snippets with full content
+          if (Object.keys(artifactsToUpdate).length > 0) {
+            setArtifacts((prevArtifacts) => {
+              const updatedArtifacts = { ...prevArtifacts };
+
+              Object.keys(artifactsToUpdate).forEach((artifactId) => {
+                const existingArtifact = updatedArtifacts[artifactId];
+                if (existingArtifact) {
+                  updatedArtifacts[artifactId] = {
+                    ...existingArtifact,
+                    content: artifactsToUpdate[artifactId].content, // Full merged content
+                    isMerged: artifactsToUpdate[artifactId].isMerged,
+                    lastUpdateTime: Date.now(),
+                  };
+
+                  console.log('✅ [Artifact] Updated state with FULL merged content:', artifactId, {
+                    previousContentLength: existingArtifact.content?.length || 0,
+                    newContentLength: artifactsToUpdate[artifactId].content?.length || 0,
+                    CRITICAL: 'Replaced snippet with full merged content in state',
+                  });
+                }
+              });
+
+              return updatedArtifacts;
+            });
+
+            //console.log('✅✅✅ [Artifact] ALL artifacts updated in state with full content');
+          }
+        }
+
+        // CRITICAL: Flush any pending database syncs immediately after streaming completes
+        // This ensures all debounced writes happen now instead of waiting for the timer
+        console.log('🌊 [Artifact] Flushing pending database syncs...');
+        await artifactCache.flushPendingSyncs();
+        console.log('✅✅✅ [Artifact] All database syncs completed (selections + content)');
+      })();
     }
 
     // Track previous streaming state
-    lastIsSubmittingRef.current = artifactsContext.isSubmitting;
-  }, [artifactsContext.isSubmitting, conversationId, setArtifacts]);
+    lastIsSubmittingRef.current = artifactsContext.isSubmitting; // Changed from isStreaming
+  }, [artifactsContext.isSubmitting, conversationId, setArtifacts, _artifacts]); // Changed dependency from isStreaming to isSubmitting
 
   const updateArtifact = useCallback(() => {
     let content = '';
@@ -340,8 +587,12 @@ export function Artifact({
       identifier,
       isArtifactUpdateNode,
       shouldUpdate,
+      identifierIsDefault: identifier === defaultIdentifier,
+      defaultIdentifier,
       REASON: isArtifactUpdateNode
-        ? 'Explicit <artifactupdate> tag'
+        ? identifier === defaultIdentifier
+          ? 'artifactupdate tag BUT identifier is default - WILL NOT UPDATE'
+          : 'Explicit <artifactupdate> tag with valid identifier'
         : 'Regular <artifact> tag - will REPLACE content, not merge',
     });
 
@@ -372,8 +623,89 @@ export function Artifact({
         const mostRecentArtifact = matchingArtifacts[0] || existingArtifact;
         const baseArtifact = matchingArtifacts.find((a) => a && !a.isUpdate) || existingArtifact;
 
-        // Use the most recent artifact's content (whether it's base or an update)
-        const baseContent = mostRecentArtifact?.content || existingArtifact.content || '';
+        // CRITICAL FIX: Use CACHED merged content from previous update if available
+        // This ensures we're building on the FULL artifact, not just the update snippet
+        let baseContent = '';
+
+        if (mostRecentArtifact?.isUpdate) {
+          // Try to get the cached merged content from the previous update
+          const cachedPreviousUpdate = artifactCache.getContent(mostRecentArtifact.id);
+
+          if (cachedPreviousUpdate?.content && cachedPreviousUpdate.content.trim() !== '') {
+            baseContent = cachedPreviousUpdate.content;
+
+            // CRITICAL: Detect and fix content duplication in cached content (works for ANY file type)
+            // Strategy: Look for repeated patterns in the first 500 chars
+            const sampleSize = Math.min(500, Math.floor(baseContent.length / 3));
+            const firstChunk = baseContent.substring(0, sampleSize);
+            const isDuplicated = baseContent.indexOf(firstChunk, sampleSize) !== -1;
+
+            if (isDuplicated) {
+              // Find where the duplication starts
+              const duplicateStartIndex = baseContent.indexOf(firstChunk, sampleSize);
+
+              console.error('🚨🚨🚨 [DUPLICATION DETECTED] Cached content has duplicated sections!', {
+                  previousUpdateId: mostRecentArtifact.id,
+                  contentLength: baseContent.length,
+                  duplicateStartsAt: duplicateStartIndex,
+                  sampleSize,
+                  contentPreview: baseContent.substring(0, 300),
+                  FIXING: 'Extracting first occurrence only (before duplication)',
+                },
+              );
+              // Extract only the first occurrence (before the duplicate starts)
+              baseContent = baseContent.substring(0, duplicateStartIndex);
+
+              // console.log('✅ Fixed duplication - using first section only:', {
+              //   newLength: baseContent.length,
+              //   newPreview: baseContent.substring(0, 150),
+              //   removedBytes: cachedPreviousUpdate.content.length - baseContent.length,
+              // });
+            }
+
+            // console.log('✅ [CHAIN UPDATES] Using CACHED merged content from previous update:', {
+            //   previousUpdateId: mostRecentArtifact.id,
+            //   cachedContentLength: baseContent.length,
+            //   cachedContentPreview: baseContent.substring(0, 150),
+            //   isDuplicated,
+            //   SOURCE: 'ArtifactCache - full merged result from previous update',
+            //   CRITICAL: 'Building on complete artifact, not snippet',
+            // });
+          } else {
+            // Fallback: use raw content from previous update (might be snippet only)
+            baseContent = mostRecentArtifact.content || baseArtifact?.content || '';
+            console.warn(
+              '⚠️ [CHAIN UPDATES] No cached content - using raw previous update content:',
+              {
+                previousUpdateId: mostRecentArtifact.id,
+                rawContentLength: baseContent.length,
+                WARNING: 'May be snippet only, not full artifact',
+              },
+            );
+          }
+        } else {
+          // Base artifact - use its content directly
+          baseContent = mostRecentArtifact?.content || existingArtifact.content || '';
+          // console.log('ℹ️ [CHAIN UPDATES] Using base artifact content:', {
+          //   baseArtifactId: mostRecentArtifact?.id,
+          //   contentLength: baseContent.length,
+          // });
+        }
+
+        // console.log('🎯 [CHAIN UPDATES] Selected base content for new update:', {
+        //   mostRecentArtifactId: mostRecentArtifact?.id,
+        //   mostRecentIsUpdate: mostRecentArtifact?.isUpdate,
+        //   baseArtifactId: baseArtifact?.id,
+        //   baseContentLength: baseContent.length,
+        //   baseContentPreview: baseContent.substring(0, 150),
+        //   usingContent: mostRecentArtifact?.isUpdate
+        //     ? 'Cached merged result from previous update'
+        //     : 'Original base artifact',
+        //   CRITICAL: "Each update builds on the previous update's FULL merged content",
+        // });
+
+        // CRITICAL: Calculate the correct index for this update BEFORE creating the key
+        // Count all existing update artifacts with the same identifier
         const existingUpdates = _artifacts
           ? Object.values(_artifacts).filter(
               (a) => a && a.isUpdate && a.identifier === existingArtifact.identifier,
@@ -518,7 +850,132 @@ export function Artifact({
         //     hasUpdate: updateArtifact.id.includes('_update'),
         //   },
         // });
-        
+
+        // CRITICAL: Check for pending selection from :::selection::: directive FIRST
+        // This selection was parsed and saved by the Selection component BEFORE artifactupdate
+        const pendingSelectionKey = `selection_pending_${messageId}`;
+        const pendingSelectionData = sessionStorage.getItem(pendingSelectionKey);
+        let pendingSelection: any = null;
+
+        // console.log('🔍 [Artifact] Checking for pending selection...', {
+        //   messageId,
+        //   storageKey: pendingSelectionKey,
+        //   hasPendingData: !!pendingSelectionData,
+        //   allSessionStorageKeys: Object.keys(sessionStorage),
+        // });
+
+        if (pendingSelectionData) {
+          try {
+            pendingSelection = JSON.parse(pendingSelectionData);
+            console.log('📍✅ [Artifact] Found pending selection from :::selection::: directive:', {
+              messageId,
+              pendingSelection,
+              SOURCE: 'Selection component via sessionStorage',
+            });
+
+            // Clear it from sessionStorage now that we've retrieved it
+            sessionStorage.removeItem(pendingSelectionKey);
+
+            // CRITICAL FIX: Save selection to MULTIPLE cache keys to ensure applyPartialUpdate can find it
+            // The merge function searches for selections using different strategies and keys
+            const selectionSaveKeys: string[] = [
+              updateArtifact.id, // Strategy 1: Exact artifact ID (e.g., "tiny-html_update0_1234567890")
+            ];
+
+            // Add base identifier if available
+            if (existingArtifact.identifier) {
+              selectionSaveKeys.push(existingArtifact.identifier); // Strategy 1.5: Base identifier (e.g., "tiny-html")
+            }
+
+            // If there's a base artifact, also save with its ID
+            if (baseArtifact?.id) {
+              selectionSaveKeys.push(baseArtifact.id);
+            }
+
+            console.log('💾 [Artifact] Saving selection to multiple cache keys for findability:', {
+              keys: selectionSaveKeys,
+              reason: 'Ensures applyPartialUpdate can find selection via any search strategy',
+            });
+
+            // CRITICAL: Batch the selection saves to prevent quota exceeded
+            // Add all entries to cache first WITHOUT triggering storage saves
+            selectionSaveKeys.forEach((key, index) => {
+              const selectionData = {
+                ...pendingSelection,
+                conversationId: conversationId || undefined,
+                timestamp: Date.now(),
+              };
+
+              // Add to cache directly (bypass setSelection to avoid multiple storage saves)
+              artifactCache._selectionCache.set(key, selectionData);
+              console.log(
+                `  ✅ Added selection to cache key ${index + 1}/${selectionSaveKeys.length}: ${key}`,
+              );
+            });
+
+            // CRITICAL: Save to storage ONCE after all entries are added
+            artifactCache._saveToStorage();
+            console.log('💾 [Artifact] Saved all selections to localStorage in ONE operation');
+
+            // CRITICAL: Sync to database ONCE using the first (primary) key
+            // Database will handle finding the selection via any key
+            // BUT ONLY IF WE HAVE A CONVERSATIONID - otherwise entries won't be retrievable!
+            if (conversationId) {
+              const primaryKey = selectionSaveKeys[0];
+              artifactCache
+                ._syncToDatabase(
+                  primaryKey,
+                  'selection',
+                  {
+                    ...pendingSelection,
+                    conversationId: conversationId,
+                    timestamp: Date.now(),
+                  },
+                  {
+                    conversationId: conversationId,
+                    messageId: messageId,
+                  },
+                )
+                .then((result) => {
+                  console.log('✅ [Artifact] Database sync completed for primary selection key:', {
+                    primaryKey,
+                    success: !!result,
+                    totalKeysInCache: selectionSaveKeys.length,
+                    conversationId: conversationId,
+                  });
+                })
+                .catch((error) => {
+                  console.error('❌ [Artifact] Database sync failed:', error);
+                });
+            } else {
+              console.error(
+                '❌❌❌ [Artifact] CANNOT SAVE TO DATABASE - conversationId is missing!',
+                {
+                  primaryKey: selectionSaveKeys[0],
+                  messageId: messageId,
+                  CRITICAL_ISSUE: 'Selection saved to localStorage but NOT to database',
+                  IMPACT: 'Will work in current session but LOST on page refresh',
+                  FIX_NEEDED: 'Ensure conversationId is available before saving selection',
+                },
+              );
+            }
+
+            console.log(
+              '💾 [Artifact] Successfully saved pending selection to all cache keys. Total keys:',
+              selectionSaveKeys.length,
+            );
+          } catch (error) {
+            console.error('❌ [Artifact] Failed to parse pending selection:', error);
+          }
+        } else {
+          console.warn('⚠️ [Artifact] No pending selection found in sessionStorage', {
+            expectedKey: pendingSelectionKey,
+            messageId,
+            POSSIBLE_ISSUE:
+              'Selection component may not have run yet, or selection was not provided',
+          });
+        }
+
         // Get all selection entries from cache
         const allSelectionEntries = Array.from(artifactCache._selectionCache.entries());
         console.log('📋 [Artifact] All cached selections:', {
@@ -532,7 +989,7 @@ export function Artifact({
             endLine: val.endLine,
           })),
         });
-        
+
         // Strategy 1: Try to find by messageId (this will work if selection was just made)
         const matchingByMessageId = allSelectionEntries
           .filter(([_key, val]) => val.artifactMessageId === messageId)
@@ -548,44 +1005,54 @@ export function Artifact({
           })
           .sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
 
-        console.log('🔍 [Artifact] Selection search results:', {
-          strategyMessageId: {
-            count: matchingByMessageId.length,
-            selections: matchingByMessageId.map(([k, v]) => ({
-              key: k,
-              messageId: v.artifactMessageId,
-              timestamp: v.timestamp,
-            })),
-          },
-          strategyIdentifier: {
-            count: matchingByIdentifier.length,
-            selections: matchingByIdentifier.map(([k, v]) => ({
-              key: k,
-              messageId: v.artifactMessageId,
-              timestamp: v.timestamp,
-            })),
-          },
-        });
+        // console.log('🔍 [Artifact] Selection search results:', {
+        //   strategyMessageId: {
+        //     count: matchingByMessageId.length,
+        //     selections: matchingByMessageId.map(([k, v]) => ({
+        //       key: k,
+        //       messageId: v.artifactMessageId,
+        //       timestamp: v.timestamp,
+        //     })),
+        //   },
+        //   strategyIdentifier: {
+        //     count: matchingByIdentifier.length,
+        //     selections: matchingByIdentifier.map(([k, v]) => ({
+        //       key: k,
+        //       messageId: v.artifactMessageId,
+        //       timestamp: v.timestamp,
+        //     })),
+        //   },
+        // });
 
         // Use messageId match if found, otherwise fall back to most recent by identifier
         const matchingSelections =
           matchingByMessageId.length > 0 ? matchingByMessageId : matchingByIdentifier;
-        
-        const sourceSelectionContext =
-          matchingSelections.length > 0 ? matchingSelections[0][1] : null;
-        
+
+        // CRITICAL: Prioritize pending selection from :::selection::: directive over cache
+        // This ensures the LLM's explicit location information is used first
+        let sourceSelectionContext: any = null;
+        if (pendingSelection) {
+          sourceSelectionContext = pendingSelection;
+          console.log(
+            '📍✅ [Artifact] Using pending selection from :::selection::: directive (highest priority)',
+          );
+        } else if (matchingSelections.length > 0) {
+          sourceSelectionContext = matchingSelections[0][1];
+          console.log('📍 [Artifact] Using cached selection context (fallback)');
+        }
+
         if (sourceSelectionContext) {
-          console.log('✅ [Artifact] Found selection context for this update:', {
-            sourceKey: matchingSelections[0][0],
-            strategy: matchingByMessageId.length > 0 ? 'messageId' : 'identifier+timestamp',
-            startLine: sourceSelectionContext.startLine,
-            endLine: sourceSelectionContext.endLine,
-            startColumn: sourceSelectionContext.startColumn,
-            endColumn: sourceSelectionContext.endColumn,
-            originalText: sourceSelectionContext.originalText?.substring(0, 100),
-            CURRENT_CONTENT: content.substring(0, 100),
-          });
-          
+          // console.log('✅ [Artifact] Found selection context for this update:', {
+          //   sourceKey: matchingSelections[0][0],
+          //   strategy: matchingByMessageId.length > 0 ? 'messageId' : 'identifier+timestamp',
+          //   startLine: sourceSelectionContext.startLine,
+          //   endLine: sourceSelectionContext.endLine,
+          //   startColumn: sourceSelectionContext.startColumn,
+          //   endColumn: sourceSelectionContext.endColumn,
+          //   originalText: sourceSelectionContext.originalText?.substring(0, 100),
+          //   CURRENT_CONTENT: content.substring(0, 100),
+          // });
+
           const selectionWithCurrentContent = {
               ...sourceSelectionContext,
             updatedText: content, // The CURRENT snippet from LLM
@@ -593,18 +1060,18 @@ export function Artifact({
           };
 
           artifactCache.setSelection(updateArtifact.id, selectionWithCurrentContent, {
-              conversationId: conversationId || undefined,
-              messageId: messageId || undefined,
+            conversationId: conversationId || undefined,
+            messageId: messageId || undefined,
           });
         } else {
           console.error(
             '❌❌❌ [Artifact] NO SELECTION CONTEXT FOUND - This will cause merge to fail!',
             {
-            messageId,
+              messageId,
               artifactId: updateArtifact.id,
               identifier: existingArtifact.identifier,
               cacheSize: allSelectionEntries.length,
-            availableMessageIds: allSelectionEntries.map(([_k, v]) => v.artifactMessageId),
+              availableMessageIds: allSelectionEntries.map(([_k, v]) => v.artifactMessageId),
               CRITICAL: 'Update will display snippet-only without proper merge',
             },
           );
@@ -614,16 +1081,58 @@ export function Artifact({
           );
         }
         if (!noMergeHappened) {
-        pendingCacheUpdates.current.set(updateArtifact.id, {
-          content: finalContent, // Save full merged content, not just snippet
-          metadata: {
-            title: updateArtifact.title,
-            type: updateArtifact.type,
-            identifier: updateArtifact.identifier,
-            source: 'directive',
-          },
-        });
-        
+          // CRITICAL: Warn if conversationId is missing
+          if (!conversationId) {
+            console.error('❌❌❌ [Artifact] Queuing update WITHOUT conversationId!', {
+              artifactId: updateArtifact.id,
+              conversationIdFromContext: artifactsContext.conversationId,
+              conversationIdFromURL: location.pathname.match(/\/c\/([^/]+)/)?.[1],
+              pathname: location.pathname,
+              BLOCKER: 'This will fail to save to database!',
+            });
+          }
+
+          // CRITICAL: Detect and prevent saving duplicated content to cache (works for ANY file type)
+          let contentToSave = finalContent;
+          const sampleSize = Math.min(500, Math.floor(contentToSave.length / 3));
+          const firstChunk = contentToSave.substring(0, sampleSize);
+          const isDuplicated = contentToSave.indexOf(firstChunk, sampleSize) !== -1;
+
+          if (isDuplicated) {
+            const duplicateStartIndex = contentToSave.indexOf(firstChunk, sampleSize);
+            console.error(
+              '🚨🚨🚨 [DUPLICATION DETECTED] Preventing duplicated content from being saved to cache!',
+              {
+                artifactId: updateArtifact.id,
+                contentLength: contentToSave.length,
+                duplicateStartsAt: duplicateStartIndex,
+                sampleSize,
+                contentPreview: contentToSave.substring(0, 300),
+                FIXING: 'Saving only first occurrence',
+              },
+            );
+
+            // Extract only the first occurrence
+            contentToSave = contentToSave.substring(0, duplicateStartIndex);
+
+            console.log('✅ Fixed duplication before saving to cache:', {
+              newLength: contentToSave.length,
+              removedBytes: finalContent.length - contentToSave.length,
+            });
+          }
+
+          pendingCacheUpdates.current.set(updateArtifact.id, {
+            content: contentToSave, // Save de-duplicated content
+            conversationId: conversationId ?? undefined, // CRITICAL: Capture conversationId NOW (convert null to undefined)
+            messageId: messageId,
+            metadata: {
+              title: updateArtifact.title,
+              type: updateArtifact.type,
+              identifier: updateArtifact.identifier,
+              source: 'directive',
+            },
+          });
+
           console.log('📝 [Artifact] Queued cache save for UPDATE artifact:', {
             artifactId: updateArtifact.id,
             contentLength: finalContent.length,
@@ -640,8 +1149,40 @@ export function Artifact({
         }
 
         if (existingArtifact && existingArtifact.id && !noMergeHappened) {
+          // CRITICAL: Detect and prevent saving duplicated content to cache (works for ANY file type)
+          let baseContentToSave = finalContent;
+          const baseSampleSize = Math.min(500, Math.floor(baseContentToSave.length / 3));
+          const baseFirstChunk = baseContentToSave.substring(0, baseSampleSize);
+          const baseIsDuplicated = baseContentToSave.indexOf(baseFirstChunk, baseSampleSize) !== -1;
+
+          if (baseIsDuplicated) {
+            const baseDuplicateStartIndex = baseContentToSave.indexOf(
+              baseFirstChunk,
+              baseSampleSize,
+            );
+            console.error(
+              '🚨🚨🚨 [DUPLICATION DETECTED] Preventing duplicated content from being saved to BASE cache!',
+              {
+                artifactId: existingArtifact.id,
+                contentLength: baseContentToSave.length,
+                duplicateStartsAt: baseDuplicateStartIndex,
+                sampleSize: baseSampleSize,
+                FIXING: 'Saving only first occurrence',
+              },
+            );
+
+            baseContentToSave = baseContentToSave.substring(0, baseDuplicateStartIndex);
+
+            console.log('✅ Fixed duplication before saving to BASE cache:', {
+              newLength: baseContentToSave.length,
+              removedBytes: finalContent.length - baseContentToSave.length,
+            });
+          }
+
           pendingCacheUpdates.current.set(existingArtifact.id, {
-            content: finalContent, // Save full merged content to base artifact cache
+            content: baseContentToSave, // Save de-duplicated content
+            conversationId: conversationId ?? undefined, // CRITICAL: Capture conversationId NOW (convert null to undefined)
+            messageId: messageId,
             metadata: {
               title: existingArtifact.title,
               type: existingArtifact.type,
@@ -651,7 +1192,7 @@ export function Artifact({
           });
           console.log('📝 [Artifact] Queued cache save for BASE artifact:', {
             artifactId: existingArtifact.id,
-            contentLength: finalContent.length,
+            contentLength: baseContentToSave.length,
             contentPreview: finalContent.substring(0, 200),
             pendingCount: pendingCacheUpdates.current.size,
           });
@@ -666,14 +1207,14 @@ export function Artifact({
           );
         }
 
-        console.log('🔍 Streaming state check:', {
-          isStreaming: artifactsContext.isSubmitting,
-          updateArtifactKey,
-          snippetLength: updateArtifact.content?.length || 0,
-          mergedLength: finalContent.length,
-          noMergeHappened,
-          WILL_SAVE: 'MERGED CONTENT (always)',
-        });
+        // console.log('🔍 Streaming state check:', {
+        //   isStreaming: artifactsContext.isSubmitting,
+        //   updateArtifactKey,
+        //   snippetLength: updateArtifact.content?.length || 0,
+        //   mergedLength: finalContent.length,
+        //   noMergeHappened,
+        //   WILL_SAVE: 'MERGED CONTENT (always)',
+        // });
 
         const displayArtifact = {
           ...updateArtifact,
@@ -685,7 +1226,7 @@ export function Artifact({
           console.log('💾 [Artifact] Storing artifact with MERGED CONTENT:', updateArtifactKey, {
             snippetLength: updateArtifact.content?.length || 0,
             mergedLength: finalContent.length,
-            isStreaming: artifactsContext.isSubmitting,
+            isStreaming: artifactsContext.isSubmitting, // Changed to isSubmitting
             CRITICAL: 'This should trigger UI refresh immediately',
           });
           return {
@@ -758,6 +1299,7 @@ export function Artifact({
           type: type,
           content: content, // Store raw content since we have no base to merge with
           messageId,
+          conversationId: conversationId ?? undefined, // CRITICAL: Convert null to undefined for type safety
           index: updateIndexWithoutBase,
           lastUpdateTime: Date.now(),
           isUpdate: true, // Mark as update even without base
@@ -783,62 +1325,67 @@ export function Artifact({
         setArtifact(updateArtifact);
         setCurrentArtifactId(updateArtifact.id);
         setArtifactsVisible(true);
-        
+
         lastContent.current = content;
         return;
       }
     }
     console.log('🔍 Proceeding with regular artifact creation for identifier:', identifier);
-    
+
+    // CRITICAL: Double-check that this is NOT an update node
+    // If it is, there's a bug in the shouldUpdate logic and we must not proceed
+    if (isArtifactUpdateNode) {
+      console.error('🚨🚨🚨 [CRITICAL BUG] artifactupdate node reached regular artifact path!', {
+        isArtifactUpdateNode,
+        identifier,
+        shouldUpdateWas: shouldUpdate,
+        REFUSING_TO_CREATE_WITH_MESSAGEID: true,
+      });
+      return; // Abort - this should never happen
+    }
+
     // Generate the artifact key
     const artifactKey = `${identifier}_${type}_${title}_${messageId}`
       .replace(/\s+/g, '_')
       .toLowerCase();
 
-    // Mark this artifact as streaming so cache updates are queued
-    //markArtifactStreaming(artifactKey);
-    
-    console.log('🔍 Proceeding with regular artifact creation for artifactKey:', artifactKey);
-    
-    // CRITICAL: Don't throttle state updates - React batches them efficiently
-    // Throttling causes streaming chunks to be dropped, making updates appear jumpy
-      const now = Date.now();
+    const now = Date.now();
     if (artifactKey === `${defaultIdentifier}_${defaultType}_${defaultTitle}_${messageId}`) {
       console.log('⚠️ Default artifact key detected, skipping artifact creation.');
-        return;
-      }
-      // Determine the correct index for this artifact (increment for each update)
-      let newIndex = 0;
+      return;
+    }
+    // Determine the correct index for this artifact (increment for each update)
+    let newIndex = 0;
 
-      if (_artifacts && identifier) {
-        const relatedArtifacts = Object.values(_artifacts).filter(
-          (a) => a && a.identifier === identifier,
-        );
-        const maxIndex = relatedArtifacts.length
-          ? Math.max(...relatedArtifacts.map((a) => (a && a.index != null ? a.index : 0)))
-          : 0;
-        newIndex = maxIndex + 1;
-      }
-      const currentArtifact: Artifact = {
-        id: artifactKey,
-        identifier,
-        title,
-        type,
-        content: content,
-        messageId,
-        index: newIndex,
-        lastUpdateTime: now,
+    if (_artifacts && identifier) {
+      const relatedArtifacts = Object.values(_artifacts).filter(
+        (a) => a && a.identifier === identifier,
+      );
+      const maxIndex = relatedArtifacts.length
+        ? Math.max(...relatedArtifacts.map((a) => (a && a.index != null ? a.index : 0)))
+        : 0;
+      newIndex = maxIndex + 1;
+    }
+    const currentArtifact: Artifact = {
+      id: artifactKey,
+      identifier,
+      title,
+      type,
+      content: content,
+      messageId,
+      index: newIndex,
+      lastUpdateTime: now,
       isUpdate: false,
     };
-      if (!location.pathname.includes('/c/')) {
-        setArtifact(currentArtifact);
-        setCurrentArtifactId(currentArtifact.id);
-        return;
-      }
+    if (!location.pathname.includes('/c/')) {
+      setArtifact(currentArtifact);
+      setCurrentArtifactId(currentArtifact.id);
+      return;
+    }
 
-      setArtifacts((prevArtifacts) => {
+    setArtifacts((prevArtifacts) => {
       const existingArtifact = prevArtifacts?.[artifactKey];
-      
+
       if (existingArtifact) {
         console.log('🔄 Updating existing base artifact with new streaming content:', {
           artifactKey,
@@ -847,17 +1394,17 @@ export function Artifact({
           willUpdate: true,
         });
       }
-      
+
       // Always update - newer content replaces older during streaming
       return {
-          ...prevArtifacts,
-          [artifactKey]: currentArtifact,
-        };
-      });
-    
-      setArtifact(currentArtifact);
-      setCurrentArtifactId(currentArtifact.id);
-      setArtifactsVisible(true);
+        ...prevArtifacts,
+        [artifactKey]: currentArtifact,
+      };
+    });
+
+    setArtifact(currentArtifact);
+    setCurrentArtifactId(currentArtifact.id);
+    setArtifactsVisible(true);
 
     // Queue cache update - will be saved when streaming completes
     console.log('⏸️ [Artifact] Queueing cache update for base artifact:', currentArtifact.id);
@@ -867,11 +1414,11 @@ export function Artifact({
       metadata: {
         title: currentArtifact.title,
         type: currentArtifact.type,
-          identifier: currentArtifact.identifier,
+        identifier: currentArtifact.identifier,
         source: 'directive',
       },
     });
-    
+
     // Update lastContent to track this version
     lastContent.current = content;
   }, [
@@ -950,39 +1497,6 @@ export function Artifact({
       const hasSubstantialContent =
         loadedArtifact.content && loadedArtifact.content.trim().length > 50 && !isCorrupted;
 
-      if (hasSubstantialContent || isRecentlyCreated) {
-        console.log(
-          '✅ [Cache Reconstruction] Artifact is NEW UPDATE - SKIP cache reconstruction',
-          {
-            artifactId: loadedArtifact.id,
-            contentLength: loadedArtifact.content?.length || 0,
-            isCorrupted,
-            hasSubstantialContent,
-            isRecentlyCreated,
-            artifactAge: loadedArtifact.lastUpdateTime
-              ? Date.now() - loadedArtifact.lastUpdateTime
-              : 'unknown',
-            DECISION: 'Use state content directly, no cache reconstruction needed',
-          },
-        );
-        setArtifact(loadedArtifact);
-        lastReconstructedArtifactId.current = _currentArtifactId;
-        return;
-      }
-
-      console.log(
-        '🔄 [Cache Reconstruction] Artifact needs reconstruction - PAGE REFRESH detected',
-        {
-          artifactId: loadedArtifact.id,
-        hasContent: !!loadedArtifact.content,
-        contentLength: loadedArtifact.content?.length || 0,
-          isCorrupted,
-          hasSubstantialContent,
-          REASON: 'Content missing, too short, or corrupted - likely page refresh',
-        },
-      );
-
-      // ========== STEP 1: ALWAYS CHECK CACHE FIRST (FASTEST PATH) ==========
       const cachedContent = artifactCache.getContent(loadedArtifact.id);
       // console.log('🔍 [Cache Reconstruction] ========== CACHE CHECK (STEP 1) ==========', {
       //   artifactId: loadedArtifact.id,
@@ -1002,21 +1516,20 @@ export function Artifact({
 
       // CRITICAL: If we have cached merged content, use it directly (skip reconstruction)
       if (cachedContent && cachedContent.content && cachedContent.content.trim() !== '') {
-        console.log(
-          '🎯✅✅✅ [Cache Reconstruction] CACHE HIT! Using cached content directly - NO MERGE NEEDED!',
-          {
-            artifactId: loadedArtifact.id,
-            cachedContentLength: cachedContent.content.length,
-            cacheAge: Date.now() - (cachedContent.timestamp || 0),
-            PERFORMANCE: '⚡ FASTEST PATH - Direct cache use',
-          },
-        );
+        // console.log(
+        //   '🎯✅✅✅ [Cache Reconstruction] CACHE HIT! Using cached content directly - NO MERGE NEEDED!',
+        //   {
+        //     artifactId: loadedArtifact.id,
+        //     cachedContentLength: cachedContent.content.length,
+        //     cacheAge: Date.now() - (cachedContent.timestamp || 0),
+        //     PERFORMANCE: '⚡ FASTEST PATH - Direct cache use',
+        //   },
+        // );
         const cachedArtifact = {
           ...loadedArtifact,
           content: cachedContent.content,
           isMerged: true,
         };
-
         setArtifact(cachedArtifact);
         setCurrentArtifactId(cachedArtifact.id);
         // DO NOT call setArtifacts here - it will trigger this useEffect again!
@@ -1067,8 +1580,8 @@ export function Artifact({
           // CRITICAL: Set this as the current artifact so it's displayed
           setCurrentArtifactId(cachedArtifact.id);
           // DO NOT call setArtifacts - causes infinite loop!
-            lastReconstructedArtifactId.current = _currentArtifactId;
-            return;
+          lastReconstructedArtifactId.current = _currentArtifactId;
+          return;
         } else {
           console.log(
             '⚠️ [Cache Reconstruction] No cached merged content found, will need to merge',
@@ -1079,7 +1592,7 @@ export function Artifact({
             },
           );
         }
-        
+
         const isCorrupted =
           loadedArtifact.content &&
           (loadedArtifact.content.startsWith('iv style') || // Detect corrupted/truncated content
@@ -1532,33 +2045,33 @@ export function Artifact({
     let content = '';
 
     // Prioritize extractedNodes (from markdown plugin) over extractContent
-      if (typeof extracted === 'string') {
-        content = extracted;
-      } else if (Array.isArray(extracted)) {
-        // Ensure all elements are strings before joining
-        if ((extracted as unknown[]).every((el) => typeof el === 'string')) {
-          content = (extracted as string[]).join('');
-        } else {
-          content = String(extracted);
-        }
-      } else if (extracted !== undefined && extracted !== null) {
+    if (typeof extracted === 'string') {
+      content = extracted;
+    } else if (Array.isArray(extracted)) {
+      // Ensure all elements are strings before joining
+      if ((extracted as unknown[]).every((el) => typeof el === 'string')) {
+        content = (extracted as string[]).join('');
+      } else {
         content = String(extracted);
+      }
+    } else if (extracted !== undefined && extracted !== null) {
+      content = String(extracted);
     }
 
     // Only fall back to extractContent if extractNodes didn't yield anything
     if (!content) {
       content = extractContent(props.children);
-      }
+    }
     const hasContent = content && content.trim() !== '';
     const shouldProcess = isArtifactUpdateNode || hasContent;
 
-    const isStreaming = artifactsContext.isSubmitting;
+    const isStreaming = artifactsContext.isSubmitting; // Changed from isStreaming to isSubmitting
     const wasStreaming = lastIsSubmittingRef.current;
     const streamingJustCompleted = wasStreaming && !isStreaming;
 
     const shouldUpdate =
       shouldProcess &&
-        (isArtifactUpdateNode
+      (isArtifactUpdateNode
         ? // For updates: Process during streaming AND after streaming completes
           (streamingJustCompleted && hasContent) ||
           // During streaming: Process if content changed
@@ -1590,21 +2103,14 @@ export function Artifact({
       );
       resetCounter();
       updateArtifact();
-    } else if (!_currentArtifactId && hasContent) {
-      // If no artifact is selected (e.g. on refresh), select this one (but only if it has content)
-      setCurrentArtifactId(artifact?.id ?? null);
-    } else {
-      console.log(
-        'skipping updateArtifact - shouldUpdate:',
-        shouldUpdate,
-        'shouldProcess:',
-        shouldProcess,
-        'hasContent:',
-        hasContent,
-        'isUpdate:',
-        isArtifactUpdateNode,
-      );
+      // } else if (!_currentArtifactId && hasContent) {
+      //   // If no artifact is selected (e.g. on refresh), select this one (but only if it has content)
+      //   setCurrentArtifactId(artifact?.id ?? null);
     }
+
+    // REMOVED AUTO-SELECTION: Don't automatically select artifacts
+    // This was causing artifacts to re-open after user explicitly closed them
+    // Users can click the artifact button to open it manually
   }, [
     props.identifier,
     props.type,
@@ -1658,6 +2164,234 @@ export function Artifact({
   return <ArtifactButton artifact={artifact} />;
 }
 
+// Selection component to parse and save selection context BEFORE artifact updates
+function SelectionComponent({
+  node,
+  selectionText: propsSelectionText,
+}: {
+  node: unknown;
+  children?: React.ReactNode;
+  selectionText?: string; // This comes from hProperties
+}) {
+  const { messageId } = useMessageContext();
+  const artifactsContext = useArtifactsContext();
+  const location = useLocation();
+  const [_artifacts] = useRecoilState(artifactsState); // Get current artifacts
+
+  // CRITICAL: Multiple fallback strategies to ALWAYS get conversationId
+  const conversationId = React.useMemo(() => {
+    // Strategy 1: From artifacts context (most reliable)
+    if (artifactsContext.conversationId) {
+      return artifactsContext.conversationId;
+    }
+
+    // Strategy 2: From URL pathname
+    const urlMatch = location.pathname.match(/\/c\/([^/]+)/);
+    if (urlMatch && urlMatch[1]) {
+      console.log('📍 [Selection] Got conversationId from URL:', urlMatch[1]);
+      return urlMatch[1];
+    }
+
+    // Strategy 3: From URL search params
+    const searchParams = new URLSearchParams(location.search);
+    const searchConvId = searchParams.get('conversationId');
+    if (searchConvId) {
+      console.log('📍 [Selection] Got conversationId from search params:', searchConvId);
+      return searchConvId;
+    }
+
+    // Strategy 4: Try to get from any existing artifact in the current message
+    const artifactsArray = _artifacts ? Object.values(_artifacts) : [];
+    const recentArtifact = artifactsArray.find((a) => a?.messageId === messageId);
+    if (recentArtifact && (recentArtifact as any).conversationId) {
+      console.log(
+        '📍 [Selection] Got conversationId from existing artifact:',
+        (recentArtifact as any).conversationId,
+      );
+      return (recentArtifact as any).conversationId;
+    }
+
+    console.error('❌ [Selection] Could not determine conversationId from any source!', {
+      contextId: artifactsContext.conversationId,
+      pathname: location.pathname,
+      search: location.search,
+      messageId,
+    });
+    return null;
+  }, [artifactsContext.conversationId, location.pathname, location.search, messageId, _artifacts]);
+
+  useEffect(() => {
+    console.log('🔍 [SelectionComponent] Component mounted/updated', {
+      messageId,
+      conversationId,
+      nodeType: (node as any)?.type,
+      hasData: !!(node as any)?.data,
+      hasSelectionText: !!(node as any)?.data?.selectionText,
+      hasPropsSelectionText: !!propsSelectionText,
+      CRITICAL: 'Should use propsSelectionText from hProperties',
+    });
+
+    // CRITICAL FIX: Use propsSelectionText from hProperties, NOT node.data
+    // ReactMarkdown doesn't preserve node.data but DOES pass hProperties as props
+    const selectionText = propsSelectionText || (node as any)?.data?.selectionText || '';
+
+    if (!selectionText) {
+      console.warn('⚠️ [Selection] No selection text found', {
+        propsSelectionText,
+        nodeData: (node as any)?.data,
+        fullNode: node,
+        CRITICAL: 'Neither props.selectionText nor node.data.selectionText available!',
+      });
+      return;
+    }
+
+    console.log('📍 [Selection] Parsing selection directive:', {
+      messageId,
+      conversationId,
+      selectionTextLength: selectionText.length,
+      selectionTextPreview: selectionText.substring(0, 200),
+      fullText: selectionText,
+    });
+
+    // Parse the selection text
+    // Expected format:
+    // Location of update:
+    // - originalText: "..."
+    // - startLine: 13
+    // - endLine: 13
+    // - startColumn: 0
+    // - endColumn: 0
+
+    // CRITICAL: Try multiple regex patterns to handle different text formats
+    // Pattern 1: Standard format with quotes: originalText: "text"
+    // Pattern 2: Alternative format: - originalText: "text"
+    const originalTextMatch =
+      selectionText.match(/(?:^|\n)\s*-?\s*originalText:\s*"([^"]*)"/m) ||
+      selectionText.match(/originalText:\s*"([^"]*)"/);
+
+    const startLineMatch =
+      selectionText.match(/(?:^|\n)\s*-?\s*startLine:\s*(\d+)/m) ||
+      selectionText.match(/startLine:\s*(\d+)/);
+
+    const endLineMatch =
+      selectionText.match(/(?:^|\n)\s*-?\s*endLine:\s*(\d+)/m) ||
+      selectionText.match(/endLine:\s*(\d+)/);
+
+    const startColumnMatch =
+      selectionText.match(/(?:^|\n)\s*-?\s*startColumn:\s*(\d+)/m) ||
+      selectionText.match(/startColumn:\s*(\d+)/);
+
+    const endColumnMatch =
+      selectionText.match(/(?:^|\n)\s*-?\s*endColumn:\s*(\d+)/m) ||
+      selectionText.match(/endColumn:\s*(\d+)/);
+
+    console.log('🔍 [Selection] Regex match results:', {
+      originalTextMatch: originalTextMatch ? originalTextMatch[1] : 'NO MATCH',
+      startLineMatch: startLineMatch ? startLineMatch[1] : 'NO MATCH',
+      endLineMatch: endLineMatch ? endLineMatch[1] : 'NO MATCH',
+      startColumnMatch: startColumnMatch ? startColumnMatch[1] : 'NO MATCH',
+      endColumnMatch: endColumnMatch ? endColumnMatch[1] : 'NO MATCH',
+      RAW_FULL_TEXT: selectionText,
+      TEXT_LINES: selectionText.split('\n').map((line, i) => `Line ${i}: "${line}"`),
+    });
+
+    if (!startLineMatch || !endLineMatch || !startColumnMatch || !endColumnMatch) {
+      console.error('❌ [Selection] Failed to parse required fields from selection text', {
+        selectionText,
+        EXPECTED_FORMAT: [
+          'Location of update:',
+          '- originalText: "text"',
+          '- startLine: 13',
+          '- endLine: 13',
+          '- startColumn: 0',
+          '- endColumn: 0',
+        ].join('\n'),
+      });
+      return;
+    }
+
+    const selectionContext = {
+      originalText: originalTextMatch ? originalTextMatch[1] : '',
+      startLine: parseInt(startLineMatch[1], 10),
+      endLine: parseInt(endLineMatch[1], 10),
+      startColumn: parseInt(startColumnMatch[1], 10),
+      endColumn: parseInt(endColumnMatch[1], 10),
+      artifactMessageId: messageId,
+      fileKey: `artifact_${messageId}`, // Required field for ArtifactSelectionContext
+    };
+
+    console.log('✅ [Selection] Parsed selection context:', {
+      ...selectionContext,
+      CRITICAL_CHECK: {
+        originalTextLength: selectionContext.originalText.length,
+        isEmptyOriginalText: selectionContext.originalText === '',
+        isAddition: selectionContext.originalText === '' && selectionContext.startLine > 0,
+        isReplacement: selectionContext.originalText !== '',
+        lineRange: `${selectionContext.startLine}-${selectionContext.endLine}`,
+        columnRange: `${selectionContext.startColumn}-${selectionContext.endColumn}`,
+      },
+    });
+
+    // CRITICAL: The artifactId will be determined by the NEXT artifactupdate directive
+    // We need to store this temporarily and associate it when artifactupdate comes
+    // Store in a temporary location that Artifact component can access
+
+    // Strategy: Use sessionStorage with messageId as key
+    // The Artifact component will read this when processing artifactupdate
+    const storageKey = `selection_pending_${messageId}`;
+    sessionStorage.setItem(storageKey, JSON.stringify(selectionContext));
+
+    console.log('💾 [Selection] Stored pending selection in sessionStorage:', {
+      key: storageKey,
+      context: selectionContext,
+      NEXT_STEP: 'Artifact component will read this when processing artifactupdate',
+    });
+
+    // Also try to find the most recent artifactupdate that might be associated
+    // by looking for artifacts with the same messageId
+    // This handles the case where selection comes AFTER artifactupdate in streaming
+    const relatedArtifacts = _artifacts
+      ? Object.values(_artifacts).filter(
+          (item: any) => item?.messageId === messageId && item?.isUpdate === true,
+        )
+      : [];
+
+    console.log('🔍 [Selection] Searching for related update artifacts:', {
+      messageId,
+      totalArtifacts: _artifacts ? Object.keys(_artifacts).length : 0,
+      relatedArtifactsFound: relatedArtifacts.length,
+      relatedArtifactIds: relatedArtifacts.map((a) => a?.id),
+    });
+
+    // CRITICAL: DO NOT save to database here - wait for streaming to complete!
+    // The selection is saved to sessionStorage above, and will be:
+    // 1. Read by Artifact component when artifactupdate arrives
+    // 2. Saved to database ONLY when streaming completes
+    // This matches the flow for artifactupdate content
+
+    if (relatedArtifacts.length > 0) {
+      console.log('🔍 [Selection] Found related update artifacts (already created):', {
+        count: relatedArtifacts.length,
+        artifacts: relatedArtifacts.map((a: any) => ({ id: a.id, identifier: a.identifier })),
+        NOTE: 'Selection is in sessionStorage - will be saved to database when streaming completes',
+      });
+    } else {
+      console.log(
+        '⏳ [Selection] No update artifacts found yet - selection arrived BEFORE artifactupdate',
+        {
+          messageId,
+          sessionStorageKey: storageKey,
+          NOTE: 'Waiting for artifactupdate directive to arrive and streaming to complete',
+        },
+      );
+    }
+  }, [node, messageId, conversationId, _artifacts, propsSelectionText]);
+
+  // Don't render anything visible
+  return null;
+}
+
 // Export the main Artifact component as ArtifactUpdate for backward compatibility
 // Both artifact and artifactupdate directives now use the same component
 export const ArtifactUpdate = Artifact;
+export const Selection = SelectionComponent;
