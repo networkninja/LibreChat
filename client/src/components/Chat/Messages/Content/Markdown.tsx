@@ -9,8 +9,13 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkDirective from 'remark-directive';
 import type { Pluggable } from 'unified';
 import { Citation, CompositeCitation, HighlightedText } from '~/components/Web/Citation';
-import { Artifact, ArtifactUpdate, artifactPlugin } from '~/components/Artifacts/Artifact';
-import { ArtifactProvider, CodeBlockProvider } from '~/Providers';
+import {
+  Artifact,
+  ArtifactUpdate,
+  artifactPlugin,
+  Selection,
+} from '~/components/Artifacts/Artifact';
+import { ArtifactProvider, ArtifactsProvider, CodeBlockProvider } from '~/Providers';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { langSubset, preprocessLaTeX } from '~/utils';
 import { unicodeCitation } from '~/components/Web';
@@ -69,32 +74,35 @@ const Markdown = memo(({ content = '', isLatestMessage }: TContentProps) => {
 
   return (
     <MarkdownErrorBoundary content={content} codeExecution={true}>
-      <ArtifactProvider>
-        <CodeBlockProvider>
-          <ReactMarkdown
-            /** @ts-ignore */
-            remarkPlugins={remarkPlugins}
-            /* @ts-ignore */
-            rehypePlugins={rehypePlugins}
-            components={
-              {
-                code,
-                a,
-                p,
-                artifact: Artifact,
-                artifactupdate: ArtifactUpdate,
-                citation: Citation,
-                'highlighted-text': HighlightedText,
-                'composite-citation': CompositeCitation,
-              } as {
-                [nodeType: string]: React.ElementType;
+      <ArtifactsProvider>
+        <ArtifactProvider>
+          <CodeBlockProvider>
+            <ReactMarkdown
+              /** @ts-ignore */
+              remarkPlugins={remarkPlugins}
+              /* @ts-ignore */
+              rehypePlugins={rehypePlugins}
+              components={
+                {
+                  code,
+                  a,
+                  p,
+                  artifact: Artifact,
+                  artifactupdate: ArtifactUpdate,
+                  selection: Selection,
+                  citation: Citation,
+                  'highlighted-text': HighlightedText,
+                  'composite-citation': CompositeCitation,
+                } as {
+                  [nodeType: string]: React.ElementType;
+                }
               }
-            }
-          >
-            {currentContent}
-          </ReactMarkdown>
-        </CodeBlockProvider>
-      </ArtifactProvider>
+            >
+              {currentContent}
+            </ReactMarkdown>
+          </CodeBlockProvider>
+        </ArtifactProvider>
+      </ArtifactsProvider>
     </MarkdownErrorBoundary>
   );
 });

@@ -9,6 +9,7 @@ export interface Artifact {
   lastUpdateTime: number;
   index?: number;
   messageId?: string;
+  conversationId?: string; // Track which conversation this artifact belongs to
   identifier?: string;
   originalIdentifier?: string;
   language?: string;

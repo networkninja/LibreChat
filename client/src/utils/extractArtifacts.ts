@@ -3,6 +3,32 @@
  * Handles multiline content, flexible attribute order, and intelligent merging.
  * When artifactupdate blocks are found, they are merged with existing artifacts.
  */
+
+/**
+ * Cleans artifact content by removing backticks and extra quotes
+ */
+function cleanArtifactContent(content: string): string {
+  let cleaned = content.trim();
+
+  // Remove opening and closing triple backticks (```language or just ```)
+  // This handles: ```javascript\n...code...\n``` or ```\n...code...\n```
+  cleaned = cleaned.replace(/^```[\w]*\s*\n?/, '').replace(/\n?```\s*$/, '');
+
+  // Remove triple single quotes if they exist (''')
+  cleaned = cleaned.replace(/^'''\s*\n?/, '').replace(/\n?'''\s*$/, '');
+
+  // Remove extra surrounding quotes that might have been added
+  // Only if they appear at the very start and end
+  if (
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    cleaned = cleaned.slice(1, -1);
+  }
+
+  return cleaned.trim();
+}
+
 export function extractAllArtifactsFromMessage(messageText: string, messageId?: string) {
   if (!messageText) {
     // console.log('⚠️ [extractArtifacts] No message text provided');
@@ -45,56 +71,23 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
     const isUpdate = type === 'artifactupdate';
     const identifier = attributes.identifier;
 
+    // Clean the content to remove any wrapping backticks or quotes
+    const cleanedContent = cleanArtifactContent(content);
+
+    console.log('🧹 [extractArtifacts] Cleaned content:', {
+      originalLength: content.length,
+      cleanedLength: cleanedContent.length,
+      removedChars: content.length - cleanedContent.length,
+      cleanedPreview: cleanedContent.substring(0, 100),
+    });
+
     if (isUpdate) {
-      // This is an update block - merge with existing artifact
-      const existingArtifact = artifactMap.get(identifier);
+      const timestamp = Date.now();
 
-      if (existingArtifact) {
-        // console.log(
-        //   '🔄 [extractArtifacts] Merging artifactupdate with existing artifact:',
-        //   identifier,
-        // );
+      // Find the original artifact (base artifact)
+      const originalArtifact = artifactMap.get(identifier);
 
-        // Apply intelligent merging
-        const mergedContent = applyIntelligentMerge(existingArtifact.content, content.trim());
-
-        // Create a separate updated artifact with unique identifier
-        // Use timestamp to ensure uniqueness and ordering
-        const timestamp = Date.now();
-        const updatedIdentifier = `${existingArtifact.identifier}_${existingArtifact.type}_${existingArtifact.title}_${messageId}`;
-        const updatedTitle = `${existingArtifact.title}`;
-
-        const updatedId = [updatedIdentifier, 'artifact', updatedTitle, messageId || '']
-          .join('_')
-          .replace(/\s+/g, '_')
-          .replace(/[()]/g, '')
-          .toLowerCase();
-
-        const updatedArtifact = {
-          id: updatedId,
-          identifier: updatedIdentifier,
-          title: updatedTitle,
-          type: existingArtifact.type,
-          content: mergedContent,
-          messageId,
-          index: existingArtifact.index, // Keep same index as original to maintain position
-          lastUpdateTime: timestamp,
-          isUpdate: true,
-          originalIdentifier: identifier, // Track the original artifact
-          parentArtifactId: existingArtifact.id, // Track immediate parent for chaining
-          ...attributes,
-        };
-
-        // Add the updated artifact to the map (keeps both original and updated)
-        artifactMap.set(updatedIdentifier, updatedArtifact);
-
-        console.log('✅ [extractArtifacts] Updated artifact content:', {
-          identifier,
-          originalLength: existingArtifact.content.length - content.trim().length,
-          updateLength: content.trim().length,
-          mergedLength: mergedContent.length,
-        });
-      } else {
+      if (!originalArtifact) {
         console.log(
           '⚠️ [extractArtifacts] artifactupdate found but no original artifact exists, treating as new artifact',
         );
@@ -111,7 +104,7 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
           identifier,
           title: attributes.title,
           type: attributes.type,
-          content: content.trim(),
+          content: cleanedContent,
           messageId,
           index: matchCount - 1,
           lastUpdateTime: Date.now(),
@@ -120,6 +113,71 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
         };
 
         artifactMap.set(identifier, newArtifact);
+        continue; // Skip to next iteration
+      }
+
+      //console.log('🔄 [extractArtifacts] Processing artifactupdate for:', identifier);
+
+      // Create unique identifier for the update artifact
+      const updatedIdentifier = `${originalArtifact.identifier}_${originalArtifact.type}_${originalArtifact.title}_${messageId}`;
+
+      // CRITICAL: Check if this update already exists (streaming scenario)
+      const existingUpdate = artifactMap.get(updatedIdentifier);
+
+      if (existingUpdate) {
+        // console.log(
+        //   '🔄 [extractArtifacts] Streaming update - REPLACING existing update artifact:',
+        //   {
+        //     identifier: updatedIdentifier,
+        //     oldContentLength: existingUpdate.content?.length || 0,
+        //     newContentLength: cleanedContent.length,
+        //     messageId,
+        //   },
+        // );
+
+        // During streaming, merge the new chunk with the ORIGINAL base artifact
+        // NOT with the previous update - this ensures we always show base + latest update
+        const mergedContent = applyIntelligentMerge(originalArtifact.content, cleanedContent);
+
+        const updatedArtifact = {
+          ...existingUpdate,
+          content: mergedContent, // MERGE with base, don't just use snippet
+          lastUpdateTime: timestamp,
+        };
+
+        artifactMap.set(updatedIdentifier, updatedArtifact);
+      } else {
+        // console.log('✨ [extractArtifacts] First update - Creating new update artifact:', {
+        //   identifier: updatedIdentifier,
+        //   contentLength: cleanedContent.length,
+        // });
+
+        // First time seeing this update - merge with original
+        const mergedContent = applyIntelligentMerge(originalArtifact.content, cleanedContent);
+        const updatedTitle = `${originalArtifact.title}`;
+
+        const updatedId = [updatedIdentifier, 'artifact', updatedTitle, messageId || '']
+          .join('_')
+          .replace(/\s+/g, '_')
+          .replace(/[()]/g, '')
+          .toLowerCase();
+
+        const updatedArtifact = {
+          id: updatedId,
+          identifier: updatedIdentifier,
+          title: updatedTitle,
+          type: originalArtifact.type,
+          content: mergedContent,
+          messageId,
+          index: originalArtifact.index,
+          lastUpdateTime: timestamp,
+          isUpdate: true,
+          originalIdentifier: identifier,
+          parentArtifactId: originalArtifact.id,
+          ...attributes,
+        };
+
+        artifactMap.set(updatedIdentifier, updatedArtifact);
       }
     } else {
       // This is an original artifact block
@@ -134,7 +192,7 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
         identifier,
         title: attributes.title,
         type: attributes.type,
-        content: content.trim(),
+        content: cleanedContent,
         messageId,
         index: matchCount - 1,
         lastUpdateTime: Date.now(),
@@ -148,17 +206,101 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
 
   const artifacts = Array.from(artifactMap.values());
   console.log(`🎯 [extractArtifacts] Total artifacts extracted: ${artifacts.length}`);
+
+  // CRITICAL: Log each artifact's content preview to detect duplication
+  artifacts.forEach((art, idx) => {
+    const contentLines = art.content?.split('\n') || [];
+    const hasDuplication =
+      contentLines.filter((line, i, arr) => arr.filter((l) => l === line).length > 3).length > 0;
+
+    console.log(`📄 [extractArtifacts] Artifact ${idx}:`, {
+      id: art.id,
+      identifier: art.identifier,
+      contentLength: art.content?.length || 0,
+      contentLines: contentLines.length,
+      hasDuplication,
+      contentPreview: art.content?.substring(0, 500),
+    });
+  });
+
   return artifacts;
 }
 
 /**
  * Apply intelligent merging of update content with original content
  */
-function applyIntelligentMerge(originalContent: string, updateContent: string): string {
+function applyIntelligentMerge(
+  originalContent: string,
+  updateContent: string,
+  selection?: {
+    startLine: number;
+    endLine: number;
+    startColumn: number;
+    endColumn: number;
+    originalText: string;
+  },
+): string {
   console.log('🔀 [extractArtifacts] Applying intelligent merge');
 
-  // For artifactupdate, simply replace the entire content
-  // This prevents duplication issues when updating HTML/code artifacts
-  console.log('✅ [extractArtifacts] Replacing entire artifact content with update');
-  return updateContent;
+  const updateLines = updateContent.split('\n');
+  const originalLines = originalContent.split('\n');
+
+  // If selection info is provided, use it to splice the update into the original
+  if (
+    selection &&
+    typeof selection.startLine === 'number' &&
+    typeof selection.startColumn === 'number'
+  ) {
+    const { startLine, endLine, startColumn, endColumn } = selection;
+    const before = originalLines.slice(0, startLine);
+    const after = originalLines.slice(endLine + 1);
+    const targetLine = originalLines[startLine] || '';
+    // Replace the target text in the target line
+    const newLine = targetLine.slice(0, startColumn) + updateContent + targetLine.slice(endColumn);
+    const merged = [...before, newLine, ...after].join('\n');
+    console.log('✅ [extractArtifacts] Merged using selection info at line', startLine);
+    return merged;
+  }
+
+  // Strategy: Replace matching sections in the original with the update
+  // Find where the update content appears in the original
+  let bestMatchIndex = -1;
+  let bestMatchScore = 0;
+
+  // Look for the first few lines of update in the original
+  const searchLines = updateLines.slice(0, Math.min(3, updateLines.length));
+
+  for (let i = 0; i <= originalLines.length - searchLines.length; i++) {
+    let score = 0;
+    for (let j = 0; j < searchLines.length; j++) {
+      const origLine = originalLines[i + j]?.trim() || '';
+      const updateLine = searchLines[j]?.trim() || '';
+
+      // Check if lines match (either exactly or partially)
+      if (origLine === updateLine) {
+        score += 2; // Exact match
+      } else if (origLine.includes(updateLine) || updateLine.includes(origLine)) {
+        score += 1; // Partial match
+      }
+    }
+
+    if (score > bestMatchScore) {
+      bestMatchScore = score;
+      bestMatchIndex = i;
+    }
+  }
+
+  // If we found a good match location (score >= 2), replace that section
+  if (bestMatchIndex >= 0 && bestMatchScore >= 2) {
+    const before = originalLines.slice(0, bestMatchIndex);
+    const after = originalLines.slice(bestMatchIndex + updateLines.length);
+    const merged = [...before, ...updateLines, ...after].join('\n');
+
+    console.log('✅ [extractArtifacts] Smart merge - replaced section at line', bestMatchIndex);
+    return merged;
+  }
+
+  // Fallback: If no good match and no selection, append the update with a warning
+  console.warn('⚠️ [extractArtifacts] No match found - APPENDING update fragment to original');
+  return originalContent + '\n\n// [ArtifactUpdate Fragment Appended]\n' + updateContent;
 }

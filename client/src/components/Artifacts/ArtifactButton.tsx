@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { useRecoilState, useSetRecoilState } from 'recoil';
 import type { Artifact } from '~/common';
 import FilePreview from '~/components/Chat/Input/Files/FilePreview';
-import { getFileType } from '~/utils';
+import { cn, getFileType, logger, isArtifactRoute } from '~/utils';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
 
@@ -13,7 +13,8 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
   const location = useLocation();
   const setVisible = useSetRecoilState(store.artifactsVisibility);
   const [_artifacts, setArtifacts] = useRecoilState(store.artifactsState);
-  const setCurrentArtifactId = useSetRecoilState(store.currentArtifactId);
+  const [currentArtifactId, setCurrentArtifactId] = useRecoilState(store.currentArtifactId);
+  const isSelected = artifact?.id === currentArtifactId;
   const [visibleArtifacts, setVisibleArtifacts] = useRecoilState(store.visibleArtifacts);
 
   // Get current conversation ID from URL
@@ -60,7 +61,7 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
       return;
     }
 
-    if (!location.pathname.includes('/c/')) {
+    if (!isArtifactRoute(location.pathname)) {
       return;
     }
 
@@ -79,28 +80,63 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
 
   return (
     <div className="group relative my-4 rounded-xl text-sm text-text-primary">
-      <button
-        type="button"
-        onClick={() => {
-          if (!location.pathname.includes('/c/')) {
+      {(() => {
+        const handleClick = () => {
+          console.log('[ArtifactButton] Click handler called:', {
+            artifactId: artifact.id,
+            isSelected,
+            currentArtifactId,
+            willDeselect: isSelected,
+          });
+
+          if (isSelected) {
+            console.log('[ArtifactButton] Deselecting artifact:', artifact.id);
+            resetCurrentArtifactId();
+            setVisible(false);
             return;
           }
           console.log('[ArtifactButton] Clicked:', { id: artifact.id, title: artifact.title });
 
           // CRITICAL: Check if this artifact belongs to the current conversation
-          // Artifacts are stored per-conversation, so clicking artifacts from other chats won't work
-          const artifactExistsInCurrentConversation = _artifacts?.[artifact.id] != null;
+          // Strategy 1: Check if artifact exists in state
+          const artifactExistsInState = _artifacts?.[artifact.id] != null;
+          // Strategy 2: Check conversationId match (if available)
+          const conversationIdMatches =
+            !artifact.conversationId || // No conversationId set (legacy artifacts)
+            !currentConversationId || // No current conversation (edge case)
+            artifact.conversationId === currentConversationId;
 
-          if (!artifactExistsInCurrentConversation) {
-            console.warn('⚠️ [ArtifactButton] Artifact does not belong to current conversation:', {
+          // CRITICAL FIX: If artifact exists in visibleArtifacts but not in state,
+          // it might just be a timing issue. Add it to state instead of blocking.
+          if (!artifactExistsInState) {
+            console.warn('⚠️ [ArtifactButton] Artifact not in state - checking conversationId:', {
               artifactId: artifact.id,
+              artifactConversationId: artifact.conversationId,
               currentConversationId,
-              artifactInState: !!_artifacts?.[artifact.id],
-              message:
-                'This artifact belongs to a different conversation. Switch to that conversation to view it.',
+              conversationIdMatches,
             });
-            // Don't open the artifact - it's not in the current conversation's state
-            return;
+
+            // If conversationId matches or is not set, add artifact to state
+            if (conversationIdMatches) {
+              console.log('✅ [ArtifactButton] Adding artifact to state (same conversation):', {
+                artifactId: artifact.id,
+                conversationId: artifact.conversationId || 'not set',
+              });
+
+              setArtifacts((prev) => ({
+                ...prev,
+                [artifact.id]: artifact,
+              }));
+            } else {
+              // conversationId mismatch - truly belongs to different conversation
+              console.warn('⚠️ [ArtifactButton] Artifact belongs to different conversation:', {
+                artifactId: artifact.id,
+                artifactConversationId: artifact.conversationId,
+                currentConversationId,
+                message: 'This artifact belongs to a different conversation.',
+              });
+              return;
+            }
           }
 
           setCurrentArtifactId(artifact.id);
@@ -131,21 +167,36 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
           setTimeout(() => {
             setCurrentArtifactId(artifact.id);
           }, 15);
-        }}
-        className="relative overflow-hidden rounded-xl border border-border-medium transition-all duration-300 hover:border-border-xheavy hover:shadow-lg"
-      >
-        <div className="w-fit bg-surface-tertiary p-2">
-          <div className="flex flex-row items-center gap-2">
-            <FilePreview fileType={fileType} className="relative" />
-            <div className="overflow-hidden text-left">
-              <div className="truncate font-medium">{artifact.title}</div>
-              <div className="truncate text-text-secondary">
-                {localize('com_ui_artifact_click')}
+        };
+
+        const buttonClass = cn(
+          'relative overflow-hidden rounded-xl transition-all duration-300 hover:border-border-medium hover:bg-surface-hover hover:shadow-lg active:scale-[0.98]',
+          {
+            'border-border-medium bg-surface-hover shadow-lg': isSelected,
+            'border-border-light bg-surface-tertiary shadow-sm': !isSelected,
+          },
+        );
+
+        const actionLabel = isSelected
+          ? localize('com_ui_click_to_close')
+          : localize('com_ui_artifact_click');
+
+        return (
+          <button type="button" onClick={handleClick} className={buttonClass}>
+            <div className="w-fit p-2">
+              <div className="flex flex-row items-center gap-2">
+                <FilePreview fileType={fileType} className="relative" />
+                <div className="overflow-hidden text-left">
+                  <div className="truncate font-medium">{artifact.title}</div>
+                  <div className="truncate text-text-secondary">
+                    {localize('com_ui_artifact_click')}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      </button>
+          </button>
+        );
+      })()}
       <br />
     </div>
   );

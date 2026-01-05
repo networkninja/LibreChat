@@ -7,24 +7,33 @@ import { extractAllArtifactsFromMessage } from '~/utils/extractArtifacts';
 import { artifactsState } from '~/store/artifacts';
 import store from '~/store';
 
-interface ArtifactsContextValue {
+export interface ArtifactsContextValue {
   isSubmitting: boolean;
+  isStreaming: boolean;
   latestMessageId: string | null;
   latestMessageText: string;
   conversationId: string | null;
-  isMessageStreaming: boolean;
-  latestMessage: TMessage | null;
 }
 
 const ArtifactsContext = createContext<ArtifactsContextValue | undefined>(undefined);
 
-export function ArtifactsProvider({ children }: { children: React.ReactNode }) {
+interface ArtifactsProviderProps {
+  children: React.ReactNode;
+  value?: Partial<ArtifactsContextValue>;
+}
+
+export function ArtifactsProvider({ children, value }: ArtifactsProviderProps) {
   const { isSubmitting, latestMessage, conversation } = useChatContext();
 
   const [_artifact, setArtifacts] = useRecoilState(artifactsState);
   const [_artifacts, setVisibleArtifacts] = useRecoilState(store.visibleArtifacts);
 
   useEffect(() => {
+    console.log('🔄 [ArtifactsProvider] Checking for artifacts in conversation');
+
+    // CRITICAL: Get conversationId early
+    const currentConversationId = conversation?.conversationId ?? null;
+
     // Check all messages in the conversation for artifacts, not just the latest
     if (conversation?.messages && Array.isArray(conversation.messages)) {
       const allArtifactsFromConversation: any[] = [];
@@ -32,6 +41,10 @@ export function ArtifactsProvider({ children }: { children: React.ReactNode }) {
       conversation.messages.forEach((message: any) => {
         if (message?.text) {
           const messageArtifacts = extractAllArtifactsFromMessage(message.text, message.messageId);
+          // CRITICAL: Add conversationId to each artifact
+          messageArtifacts.forEach((artifact) => {
+            artifact.conversationId = currentConversationId;
+          });
           allArtifactsFromConversation.push(...messageArtifacts);
         }
       });
@@ -39,6 +52,8 @@ export function ArtifactsProvider({ children }: { children: React.ReactNode }) {
       console.log(
         '🎯 [ArtifactsProvider] Found artifacts from all messages:',
         allArtifactsFromConversation.length,
+        'conversationId:',
+        currentConversationId,
       );
 
       if (allArtifactsFromConversation.length > 0) {
@@ -91,6 +106,9 @@ export function ArtifactsProvider({ children }: { children: React.ReactNode }) {
         latestMessage.messageId,
       );
       if (allArtifacts.length > 0) {
+        allArtifacts.forEach((artifact) => {
+          artifact.conversationId = currentConversationId;
+        });
         const artifactMap = Object.fromEntries(allArtifacts.map((a) => [a.id, a]));
         setArtifacts((prev) => ({ ...prev, ...artifactMap }));
         setVisibleArtifacts((prev) => ({ ...prev, ...artifactMap }));
@@ -98,13 +116,15 @@ export function ArtifactsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [
     conversation?.messages,
+    conversation?.conversationId,
     latestMessage?.text,
     latestMessage?.messageId,
+    latestMessage?.unfinished,
     setArtifacts,
     setVisibleArtifacts,
   ]);
 
-  const latestMessageText = useMemo(() => {
+  const chatLatestMessageText = useMemo(() => {
     return getLatestText({
       messageId: latestMessage?.messageId ?? null,
       text: latestMessage?.text ?? null,
@@ -112,32 +132,34 @@ export function ArtifactsProvider({ children }: { children: React.ReactNode }) {
     } as TMessage);
   }, [latestMessage?.messageId, latestMessage?.text, latestMessage?.content]);
 
-  // Detect if the latest message is still streaming
-  const isMessageStreaming = useMemo(() => {
-    if (!latestMessage) return false;
-    console.log('latestMessage unfinished status:', latestMessage);
-    // A message is streaming ONLY if explicitly marked as unfinished
-    // Don't check finish_reason - it may be undefined for cached/complete messages
-    return latestMessage.unfinished === true;
-  }, [latestMessage]);
+  const defaultContextValue = useMemo<ArtifactsContextValue>(() => {
+    const isStreamingValue = latestMessage?.unfinished === true;
+    console.log('🔍 [ArtifactsContext] Computing isStreaming:', {
+      latestMessageId: latestMessage?.messageId,
+      unfinished: latestMessage?.unfinished,
+      unfinishedType: typeof latestMessage?.unfinished,
+      isStreamingValue,
+      isSubmitting,
+    });
+    return {
+      isSubmitting,
+      isStreaming: isStreamingValue,
+      latestMessageText: chatLatestMessageText,
+      latestMessageId: latestMessage?.messageId ?? null,
+      conversationId: conversation?.conversationId ?? null,
+    };
+  }, [
+    isSubmitting,
+    latestMessage?.unfinished,
+    chatLatestMessageText,
+    latestMessage?.messageId,
+    conversation?.conversationId,
+  ]);
 
   /** Context value only created when relevant values change */
   const contextValue = useMemo<ArtifactsContextValue>(
-    () => ({
-      isSubmitting,
-      latestMessageText,
-      latestMessageId: latestMessage?.messageId ?? null,
-      conversationId: conversation?.conversationId ?? null,
-      isMessageStreaming,
-      latestMessage: latestMessage ?? null,
-    }),
-    [
-      isSubmitting,
-      latestMessage,
-      latestMessageText,
-      conversation?.conversationId,
-      isMessageStreaming,
-    ],
+    () => (value ? { ...defaultContextValue, ...value } : defaultContextValue),
+    [defaultContextValue, value],
   );
 
   return <ArtifactsContext.Provider value={contextValue}>{children}</ArtifactsContext.Provider>;
@@ -146,7 +168,16 @@ export function ArtifactsProvider({ children }: { children: React.ReactNode }) {
 export function useArtifactsContext() {
   const context = useContext(ArtifactsContext);
   if (!context) {
-    throw new Error('useArtifactsContext must be used within ArtifactsProvider');
+    // Return a safe default instead of throwing
+    // This allows the component to work in contexts where the provider isn't available
+    console.warn('⚠️ useArtifactsContext called without ArtifactsProvider - using defaults');
+    return {
+      isSubmitting: false,
+      isStreaming: false,
+      latestMessageId: null,
+      latestMessageText: '',
+      conversationId: null,
+    };
   }
   return context;
 }
