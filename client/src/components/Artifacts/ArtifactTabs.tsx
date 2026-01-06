@@ -4,8 +4,8 @@ import * as Tabs from '@radix-ui/react-tabs';
 import type { SandpackPreviewRef } from '@codesandbox/sandpack-react/unstyled';
 import type { CodeEditorRef } from '@codesandbox/sandpack-react';
 import type { Artifact } from '~/common';
-import { useCodeState } from '~/Providers/EditorContext';
-import { useArtifactsContext, useChatContext } from '~/Providers';
+import { useEditorContext, useArtifactsContext } from '~/Providers';
+import { useChatContext } from '~/Providers';
 import useArtifactProps from '~/hooks/Artifacts/useArtifactProps';
 import { useAutoScroll } from '~/hooks/Artifacts/useAutoScroll';
 import { ArtifactCodeEditor } from './ArtifactCodeEditor';
@@ -35,7 +35,7 @@ export default function ArtifactTabs({
   isSharedConvo?: boolean;
 }) {
   const { isSubmitting } = useArtifactsContext();
-  const { currentCode, setCurrentCode } = useCodeState();
+  const { currentCode, setCurrentCode } = useEditorContext();
   const { data: startupConfig } = useGetStartupConfig();
   const { latestMessage: _latestMessage } = useChatContext();
   const [_artifacts, _setArtifacts] = useRecoilState(artifactsState);

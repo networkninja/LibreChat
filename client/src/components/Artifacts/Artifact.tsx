@@ -5,7 +5,7 @@ import { useLocation } from 'react-router-dom';
 import type { Pluggable } from 'unified';
 import type { Artifact } from '~/common';
 import { useMessageContext, useArtifactContext, useArtifactsContext } from '~/Providers';
-import { logger, extractNodes, extractContent, isArtifactRoute } from '~/utils';
+import { logger, extractNodes, extractContent } from '~/utils';
 import { artifactsState } from '~/store/artifacts';
 import ArtifactButton from './ArtifactButton';
 import { artifactCache } from './ArtifactCache';
