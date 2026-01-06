@@ -37,8 +37,7 @@ export type selectionContext = {
 
 // Note: Using centralized artifactCache instead of local cache
 
-const CodeEditor = memo(
-  ({
+const CodeEditor =   ({
     fileKey,
     readOnly,
     artifact,
@@ -55,8 +54,7 @@ const CodeEditor = memo(
   }) => {
     const { sandpack } = useSandpack();
     const [currentUpdate, setCurrentUpdate] = useState<string | null>(null);
-    const { isMutating, setIsMutating } = useMutationState();
-    const { setCurrentCode } = useCodeState();
+    const { isMutating, setIsMutating, setCurrentCode } = useEditorContext();
     const [showSelectionTooltip, setShowSelectionTooltip] = useState(false);
     const [currentSelection, setCurrentSelection] = useState<string>('');
     const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
@@ -819,8 +817,7 @@ ${currentSelection}
         )}
       </div>
     );
-  },
-);
+};
 
 export const ArtifactCodeEditor = function ({
   files,

@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { useRecoilState, useSetRecoilState } from 'recoil';
 import type { Artifact } from '~/common';
 import FilePreview from '~/components/Chat/Input/Files/FilePreview';
-import { cn, getFileType, logger, isArtifactRoute } from '~/utils';
+import { cn, getFileType, logger } from '~/utils';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
 
@@ -62,9 +62,9 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
       return;
     }
 
-    if (!isArtifactRoute(location.pathname)) {
-      return;
-    }
+    // if (!isArtifactRoute(location.pathname)) {
+    //   return;
+    // }
 
     const debouncedSetVisible = debouncedSetVisibleRef.current;
     debouncedSetVisible(artifact, visibleArtifacts);
