@@ -5,7 +5,7 @@ import { useLocation } from 'react-router-dom';
 import { useArtifactsContext } from '~/Providers';
 import { getKey } from '~/utils/artifacts';
 import store from '~/store';
-import { artifactCache } from '~/components/Artifacts/ArtifactCache';
+import { artifactCache } from '~/components/Artifacts/artifactCache';
 import {
   saveConversationIdToStorage,
   loadConversationIdFromStorage,

@@ -14,7 +14,7 @@ import { useEditorContext, useArtifactsContext } from '~/Providers';
 import { sharedFiles, sharedOptions } from '~/utils/artifacts';
 import { logger } from '~/utils';
 import { useLocalize } from '~/hooks';
-import { artifactCache } from './ArtifactCache';
+import { artifactCache } from './artifactCache';
 import { useRecoilValue } from 'recoil';
 import { artifactsState } from '~/store/artifacts';
 
@@ -928,4 +928,4 @@ export const ArtifactCodeEditor = function ({
 };
 
 // Export the centralized artifact cache
-export { artifactCache } from './ArtifactCache';
+export { artifactCache } from './artifactCache';

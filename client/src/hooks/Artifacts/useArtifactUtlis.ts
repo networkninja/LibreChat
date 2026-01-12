@@ -1,4 +1,4 @@
-import { artifactCache } from '~/components/Artifacts/ArtifactCache';
+import { artifactCache } from '~/components/Artifacts/artifactCache';
 // --- Sanitizer: removes duplicate closing tags, orphan style fragments, dangling tails, duplicated <p> blocks, and DUPLICATE DOCTYPE/HTML ---
 // function sanitizeArtifactContent(html: string): string {
 //   if (!html) return html;

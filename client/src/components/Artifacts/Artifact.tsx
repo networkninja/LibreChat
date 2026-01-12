@@ -8,7 +8,7 @@ import { useMessageContext, useArtifactContext, useArtifactsContext } from '~/Pr
 import { logger, extractNodes, extractContent } from '~/utils';
 import { artifactsState } from '~/store/artifacts';
 import ArtifactButton from './ArtifactButton';
-import { artifactCache } from './ArtifactCache';
+import { artifactCache } from './artifactCache';
 import store from '~/store';
 import { applyPartialUpdate, applyAllPartialUpdates } from '~/hooks/Artifacts/useArtifactUtlis';
 import { artifactRefreshTriggerState } from '~/hooks/Artifacts/useArtifacts';

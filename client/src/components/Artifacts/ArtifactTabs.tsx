@@ -14,7 +14,8 @@ import { ArtifactPreview } from './ArtifactPreview';
 import { useRecoilState } from 'recoil';
 import { useSubmitMessage } from '~/hooks';
 import { artifactsState } from '~/store/artifacts';
-import { artifactCache } from './ArtifactCache';
+import { artifactCache } from './artifactCache';
+import { cn } from '~/utils';
 import {
   applyAllPartialUpdates,
   applyPartialUpdate,
