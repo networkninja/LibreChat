@@ -599,13 +599,21 @@ export function Artifact({
     let finalContent = content;
 
     if (shouldUpdate) {
-      // Find the existing original artifact with matching identifier
-      const existingArtifact = Object.values(_artifacts || {}).find(
+      // CRITICAL FIX: Use exact match first, then strict prefix for updates only
+      // This prevents matching wrong artifacts with similar identifiers
+      let existingArtifact = Object.values(_artifacts || {}).find(
+        (a) => a && a.identifier === identifier,
+      );
+
+      // Fallback: Allow prefix match ONLY for update chain artifacts (identifier-update-N pattern)
+      if (!existingArtifact) {
+        existingArtifact = Object.values(_artifacts || {}).find(
         (a) =>
           a &&
           typeof a.identifier === 'string' &&
-          (a.identifier === identifier || a.identifier.startsWith(identifier)),
+            a.identifier.startsWith(identifier + '-update-'),
       );
+      }
 
       console.log('🔍 Search result for existing artifact:', existingArtifact);
 
@@ -736,6 +744,7 @@ export function Artifact({
         const updateArtifactKey =
           `${existingArtifact.identifier}_update${updateIndex}_${type}_${title}`
             .replace(/\s+/g, '_')
+            .replace(/\//g, '-') // Replace slashes with dashes (MIME types)
             .toLowerCase();
 
         console.log('🔑 [Artifact Update] Generated artifact key:', {
@@ -1238,10 +1247,35 @@ export function Artifact({
         setArtifact(displayArtifact); // Set local state with merged content
         setCurrentArtifactId(updateArtifact.id);
 
+        // CRITICAL VERIFICATION: Log what's actually in artifacts state after save
+        setTimeout(() => {
+          setArtifacts((currentArtifacts) => {
+            if (!currentArtifacts) {
+              console.error('❌ [VERIFICATION] artifacts state is null!');
+              return currentArtifacts;
+            }
+
+            const savedArtifact = currentArtifacts[updateArtifactKey];
+            console.log('✅ [VERIFICATION] Artifact in state after save:', {
+              artifactId: updateArtifactKey,
+              exists: !!savedArtifact,
+              contentLength: savedArtifact?.content?.length || 0,
+              contentPreview: savedArtifact?.content?.substring(0, 100),
+              isMerged: savedArtifact?.isMerged,
+              EXPECTED_LENGTH: finalContent.length,
+              MATCHES_EXPECTED: savedArtifact?.content === finalContent,
+              WARNING: savedArtifact?.content !== finalContent ? '🚨 CONTENT MISMATCH!' : 'OK',
+            });
+            return currentArtifacts; // Don't modify, just inspect
+          });
+        }, 100);
+
+        // CRITICAL: Force a refresh trigger to ensure UI updates
+        // This is needed because during streaming, React might batch updates
         console.log('🔄 [Artifact] Forcing refresh trigger for UI update');
         _setRefreshTrigger((prev) => prev + 1);
 
-            setArtifactsVisible(true);
+        setArtifactsVisible(true);
 
         console.log('✅ [Artifact] Set artifact with MERGED CONTENT for display:', {
           artifactId: updateArtifact.id,
@@ -1286,6 +1320,7 @@ export function Artifact({
           // Format: identifier_updateN_type_title (same as line ~641)
           updateArtifactKey = `${identifier}_update${updateIndexWithoutBase}_${type}_${title}`
             .replace(/\s+/g, '_')
+            .replace(/\//g, '-') // Replace slashes with dashes (MIME types)
             .toLowerCase();
 
           // Don't update state yet - just calculate the index
@@ -1347,6 +1382,7 @@ export function Artifact({
     // Generate the artifact key
     const artifactKey = `${identifier}_${type}_${title}_${messageId}`
       .replace(/\s+/g, '_')
+      .replace(/\//g, '-') // Replace slashes with dashes
       .toLowerCase();
 
     const now = Date.now();
@@ -1373,6 +1409,7 @@ export function Artifact({
       type,
       content: content,
       messageId,
+      conversationId: conversationId ?? undefined, // CRITICAL: Convert null to undefined for type safety
       index: newIndex,
       lastUpdateTime: now,
       isUpdate: false,
@@ -1411,6 +1448,8 @@ export function Artifact({
 
     pendingCacheUpdates.current.set(currentArtifact.id, {
       content: currentArtifact.content || '',
+      conversationId: conversationId ?? undefined, // CRITICAL: Capture conversationId NOW (convert null to undefined)
+      messageId: messageId,
       metadata: {
         title: currentArtifact.title,
         type: currentArtifact.type,
@@ -2265,25 +2304,26 @@ function SelectionComponent({
     // CRITICAL: Try multiple regex patterns to handle different text formats
     // Pattern 1: Standard format with quotes: originalText: "text"
     // Pattern 2: Alternative format: - originalText: "text"
-    const originalTextMatch =
-      selectionText.match(/(?:^|\n)\s*-?\s*originalText:\s*"([^"]*)"/m) ||
-      selectionText.match(/originalText:\s*"([^"]*)"/);
+    // Pattern 3: Multi-line quoted text that spans multiple lines
+    
+    // For originalText, handle multi-line strings that might span multiple lines
+    // Strategy: Match from originalText: " to the last " before startLine:
+    // This handles nested single quotes in JSON properly
+    // Also handle optional hyphens: "- originalText:" or just "originalText:"
+    let originalTextMatch = selectionText.match(/-?\s*originalText:\s*"([\s\S]*?)"\s*(?:\n|$)/);
+    if (!originalTextMatch) {
+      // Fallback 1: More greedy - match everything up to the quote before startLine/endLine
+      originalTextMatch = selectionText.match(/-?\s*originalText:\s*"([\s\S]+?)"\s*(?=\n\w+:|\n$|$)/);
+    }
+    if (!originalTextMatch) {
+      // Fallback 2: Try without quotes for single-word values
+      originalTextMatch = selectionText.match(/-?\s*originalText:\s*([^\n]+)/);
+    }
 
-    const startLineMatch =
-      selectionText.match(/(?:^|\n)\s*-?\s*startLine:\s*(\d+)/m) ||
-      selectionText.match(/startLine:\s*(\d+)/);
-
-    const endLineMatch =
-      selectionText.match(/(?:^|\n)\s*-?\s*endLine:\s*(\d+)/m) ||
-      selectionText.match(/endLine:\s*(\d+)/);
-
-    const startColumnMatch =
-      selectionText.match(/(?:^|\n)\s*-?\s*startColumn:\s*(\d+)/m) ||
-      selectionText.match(/startColumn:\s*(\d+)/);
-
-    const endColumnMatch =
-      selectionText.match(/(?:^|\n)\s*-?\s*endColumn:\s*(\d+)/m) ||
-      selectionText.match(/endColumn:\s*(\d+)/);
+    const startLineMatch = selectionText.match(/-?\s*startLine:\s*(\d+)/);
+    const endLineMatch = selectionText.match(/-?\s*endLine:\s*(\d+)/);
+    const startColumnMatch = selectionText.match(/-?\s*startColumn:\s*(\d+)/);
+    const endColumnMatch = selectionText.match(/-?\s*endColumn:\s*(\d+)/);
 
     console.log('🔍 [Selection] Regex match results:', {
       originalTextMatch: originalTextMatch ? originalTextMatch[1] : 'NO MATCH',
@@ -2314,8 +2354,8 @@ function SelectionComponent({
       originalText: originalTextMatch ? originalTextMatch[1] : '',
       startLine: parseInt(startLineMatch[1], 10),
       endLine: parseInt(endLineMatch[1], 10),
-      startColumn: parseInt(startColumnMatch[1], 10),
-      endColumn: parseInt(endColumnMatch[1], 10),
+      startColumn, // Use the variable with default value (already computed above)
+      endColumn,   // Use the variable with default value (already computed above)
       artifactMessageId: messageId,
       fileKey: `artifact_${messageId}`, // Required field for ArtifactSelectionContext
     };

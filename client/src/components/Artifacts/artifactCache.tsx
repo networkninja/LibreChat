@@ -15,6 +15,7 @@ export interface ArtifactSelectionContext {
   artifactMessageId?: string;
   conversationId?: string;
   timestamp?: number;
+  source?: 'user' | 'llm'; // NEW: Track if selection came from manual user ac
 }
 
 export interface ArtifactContentCache {
@@ -368,18 +369,21 @@ export const artifactCache = {
     try {
       const result = await artifactCacheApi.saveEntry(artifactId, cacheType, data, options);
 
-      // console.log('✅✅✅ [ArtifactCache._syncToDatabase] Database sync COMPLETED:', {
-      //   artifactId,
-      //   cacheType,
-      //   success: !!result,
-      //   conversationId: options.conversationId,
-      //   savedConversationId: result?.conversationId,
-      //   resultPreview: result ? JSON.stringify(result).substring(0, 200) : 'null',
-      // });
+      if (!result) {
+        // Failed but that's ok - localStorage is working
+        return null;
+      }
 
       return result;
-    } catch (error) {
-      console.error('❌ [ArtifactCache] Failed to sync to database:', error);
+    } catch (_error) {
+      // Silently fail - localStorage fallback is sufficient
+      // Only log the first error to avoid console spam
+      if (!(window as any)._artifactSyncWarningShown) {
+        console.warn(
+          '⚠️ [ArtifactCache] Database sync unavailable - artifacts will use localStorage only',
+        );
+        (window as any)._artifactSyncWarningShown = true;
+      }
       return null;
     }
   },
@@ -510,18 +514,46 @@ export const artifactCache = {
     console.log('💾💾💾 [ArtifactCache.setSelection] ========== EXIT POINT ==========');
   },
 
+  _normalizeArtifactId: (artifactId: string): string => {
+    // Replace slashes with dashes to match new format
+    return artifactId.replace(/\//g, '-');
+  },
+
   getSelection: (artifactId: string): ArtifactSelectionContext | undefined => {
-    return artifactCache._selectionCache.get(artifactId);
+    // Try normalized ID first (new format)
+    const normalizedId = artifactCache._normalizeArtifactId(artifactId);
+    let selection = artifactCache._selectionCache.get(normalizedId);
+
+    // Fallback: try original ID (for backward compatibility)
+    if (!selection && normalizedId !== artifactId) {
+      selection = artifactCache._selectionCache.get(artifactId);
+    }
+
+    return selection;
   },
 
   isSelectionValid: (artifactId: string, maxAge = 30000): boolean => {
-    const entry = artifactCache._selectionCache.get(artifactId);
+    const normalizedId = artifactCache._normalizeArtifactId(artifactId);
+    let entry = artifactCache._selectionCache.get(normalizedId);
+
+    // Fallback: try original ID
+    if (!entry && normalizedId !== artifactId) {
+      entry = artifactCache._selectionCache.get(artifactId);
+    }
+
     if (!entry) return false;
     return Date.now() - (entry.timestamp || 0) < maxAge;
   },
 
   clearSelection: (artifactId: string) => {
-    artifactCache._selectionCache.delete(artifactId);
+    const normalizedId = artifactCache._normalizeArtifactId(artifactId);
+
+    // Clear both formats to be safe
+    artifactCache._selectionCache.delete(normalizedId);
+    if (normalizedId !== artifactId) {
+      artifactCache._selectionCache.delete(artifactId);
+    }
+
     artifactCache._saveToStorage(); // Persist to localStorage
   },
 
@@ -718,15 +750,15 @@ export const artifactCache = {
 
     // CRITICAL: Also sync all current cache entries immediately
     // This ensures selections made right before refresh are saved
-    console.log(
-      '💾 [ArtifactCache.flushPendingSyncs] Syncing ALL current selections to database...',
-    );
+    // console.log(
+    //   '💾 [ArtifactCache.flushPendingSyncs] Syncing ALL current selections to database...',
+    // );
     for (const [artifactId, selectionData] of artifactCache._selectionCache.entries()) {
-      console.log('📤 [flushPendingSyncs] Syncing selection for:', artifactId, {
-        conversationId: selectionData.conversationId, // Use stored conversationId (CORRECT)
-        artifactMessageId: selectionData.artifactMessageId,
-        BUG_FIX: 'Using selectionData.conversationId instead of selectionData.artifactMessageId',
-      });
+      // console.log('📤 [flushPendingSyncs] Syncing selection for:', artifactId, {
+      //   conversationId: selectionData.conversationId, // Use stored conversationId (CORRECT)
+      //   artifactMessageId: selectionData.artifactMessageId,
+      //   BUG_FIX: 'Using selectionData.conversationId instead of selectionData.artifactMessageId',
+      // });
       promises.push(
         artifactCache._syncToDatabase(artifactId, 'selection', selectionData, {
           conversationId: selectionData.conversationId, // FIXED: Use conversationId, not artifactMessageId
@@ -780,14 +812,14 @@ export const artifactCache = {
     artifactCache._databaseSyncTimers.clear();
 
     await Promise.all(promises);
-    console.log(
-      '✅ [ArtifactCache.flushPendingSyncs] Flushed all pending database syncs:',
-      promises.length,
-    );
+    // console.log(
+    //   '✅ [ArtifactCache.flushPendingSyncs] Flushed all pending database syncs:',
+    //   promises.length,
+    // );
 
     // CRITICAL: Also flush localStorage immediately (bypass debounce)
     artifactCache._flushStorageNow();
-    console.log('✅ [ArtifactCache.flushPendingSyncs] Also flushed localStorage');
+    //console.log('✅ [ArtifactCache.flushPendingSyncs] Also flushed localStorage');
   },
 
   // Initialization method - call this when the app starts
@@ -813,18 +845,18 @@ export const artifactCache = {
       );
 
       // CRITICAL: Log what's currently in cache BEFORE loading from database
-      console.log('📦 [ArtifactCache] Content cache state BEFORE database load:', {
-        contentCacheSize: artifactCache._contentCache.size,
-        contentCacheKeys: Array.from(artifactCache._contentCache.keys()),
-        contentCachePreviews: Array.from(artifactCache._contentCache.entries()).map(
-          ([id, content]) => ({
-            artifactId: id,
-            contentLength: content.content?.length || 0,
-            source: content.source,
-            timestamp: content.timestamp,
-          }),
-        ),
-      });
+      // console.log('📦 [ArtifactCache] Content cache state BEFORE database load:', {
+      //   contentCacheSize: artifactCache._contentCache.size,
+      //   contentCacheKeys: Array.from(artifactCache._contentCache.keys()),
+      //   contentCachePreviews: Array.from(artifactCache._contentCache.entries()).map(
+      //     ([id, content]) => ({
+      //       artifactId: id,
+      //       contentLength: content.content?.length || 0,
+      //       source: content.source,
+      //       timestamp: content.timestamp,
+      //     }),
+      //   ),
+      // });
 
       const entries = await artifactCacheApi.getConversationEntries(conversationId);
 
@@ -851,11 +883,11 @@ export const artifactCache = {
       for (const entry of entries) {
         switch (entry.cacheType) {
           case 'selection': {
-            console.log('💾 [ArtifactCache] Loading selection entry to cache:', {
-              artifactId: entry.artifactId,
-              startLine: (entry.data as ArtifactSelectionContext).startLine,
-              endLine: (entry.data as ArtifactSelectionContext).endLine,
-            });
+            // console.log('💾 [ArtifactCache] Loading selection entry to cache:', {
+            //   artifactId: entry.artifactId,
+            //   startLine: (entry.data as ArtifactSelectionContext).startLine,
+            //   endLine: (entry.data as ArtifactSelectionContext).endLine,
+            // });
 
             const existingSelection = artifactCache._selectionCache.get(entry.artifactId);
             if (!existingSelection) {
@@ -865,10 +897,10 @@ export const artifactCache = {
               );
               console.log('✅ [ArtifactCache] Selection cached (NEWEST)');
             } else {
-              console.log(
-                '⏭️ [ArtifactCache] Skipping OLDER selection entry - already have newer version for:',
-                entry.artifactId,
-              );
+              // console.log(
+              //   '⏭️ [ArtifactCache] Skipping OLDER selection entry - already have newer version for:',
+              //   entry.artifactId,
+              // );
             }
             break;
           }
@@ -917,9 +949,11 @@ export const artifactCache = {
         }
       }
 
+      // console.log('═'.repeat(80));
+
       // Dump ALL selection coordinates for debugging
-      console.log('🔍 [ArtifactCache] COMPLETE SELECTION CACHE DUMP:');
-      console.log('═'.repeat(80));
+      // console.log('🔍 [ArtifactCache] COMPLETE SELECTION CACHE DUMP:');
+      // console.log('═'.repeat(80));
       const allSelections = Array.from(artifactCache._selectionCache.entries());
       allSelections.forEach(([artifactId, selection], idx) => {
         // console.log(`\n📍 Selection ${idx + 1}/${allSelections.length}:`);
@@ -939,7 +973,7 @@ export const artifactCache = {
         // console.log(`   Message ID: ${selection.artifactMessageId || 'undefined'}`);
         // console.log(`   Timestamp: ${selection.timestamp || 'undefined'}`);
       });
-      // console.log('═'.repeat(80));
+      //console.log('═'.repeat(80));
 
       // Save to localStorage for offline access
       artifactCache._saveToStorage();
@@ -1036,17 +1070,17 @@ export const artifactCache = {
         selection && cached && (selection.timestamp || 0) > (cached.timestamp || 0);
 
       if (cached && cached.content && cached.content.trim() !== '' && !hasNewerSelection) {
-        console.log(
-          '💾 [getDisplayArtifact] CACHE HIT - Returning cached merged content for update artifact:',
-          artifactId,
-          {
-            cachedContentLength: cached.content.length,
-            cachedTimestamp: cached.timestamp,
-            selectionTimestamp: selection?.timestamp || 'none',
-            BENEFIT: 'Skipping merge - using cached result from previous merge',
-            source: 'IndexedDB cache',
-          },
-        );
+        // console.log(
+        //   '💾 [getDisplayArtifact] CACHE HIT - Returning cached merged content for update artifact:',
+        //   artifactId,
+        //   {
+        //     cachedContentLength: cached.content.length,
+        //     cachedTimestamp: cached.timestamp,
+        //     selectionTimestamp: selection?.timestamp || 'none',
+        //     BENEFIT: 'Skipping merge - using cached result from previous merge',
+        //     source: 'IndexedDB cache',
+        //   },
+        // );
         return {
           ...artifact,
           content: cached.content,
@@ -1072,16 +1106,22 @@ export const artifactCache = {
         //   },
         // );
       }
-      console.log(
-        '🔄 [getDisplayArtifact] Update artifact needs merge (page refresh or stale), computing for:',
-        artifactId,
-        {
-          hasIsMergedFlag: artifact.isMerged,
-          isRecentlyUpdated,
-          age: artifact.lastUpdateTime ? Date.now() - artifact.lastUpdateTime : 'unknown',
-          REASON: 'Cache miss - need to recompute merge from base',
-        },
-      );
+    }
+
+    // PRIORITY 3: Compute merge for update artifacts (only if cache miss)
+    // CRITICAL: Only enter this branch if artifactId actually contains "_update"
+    if (isActuallyUpdate) {
+      // CRITICAL: After page refresh with no cache, we need to recompute merge ONCE
+      // console.log(
+      //   '🔄 [getDisplayArtifact] Update artifact needs merge (cache miss), computing for:',
+      //   artifactId,
+      //   {
+      //     hasIsMergedFlag: artifact.isMerged,
+      //     isRecentlyUpdated,
+      //     age: artifact.lastUpdateTime ? Date.now() - artifact.lastUpdateTime : 'unknown',
+      //     REASON: 'Cache miss - need to recompute merge from base',
+      //   },
+      // );
 
       const baseArtifact = Object.values(artifacts).find(
         (a) => a && !a.isUpdate && a.identifier === artifact.identifier,
@@ -1089,10 +1129,10 @@ export const artifactCache = {
 
       if (baseArtifact) {
         // console.log(
-        //   '🔴 [ArtifactCache.getDisplayArtifact] Computing merged content on page refresh:',
+        //   '🔴 [ArtifactCache.getDisplayArtifact] Computing merged content (cache miss):',
         //   {
         //     location: 'ArtifactCache.ts getDisplayArtifact()',
-        //     reason: 'Page refresh - recomputing merge',
+        //     reason: 'Cache miss - recomputing merge',
         //     baseArtifactId: baseArtifact.id,
         //     targetArtifactId: artifactId,
         //     baseContentLength: baseArtifact.content?.length,
@@ -1125,10 +1165,10 @@ export const artifactCache = {
     // PRIORITY 4: Check cache for base artifacts
     const cached = artifactCache.getContent(artifactId);
     if (cached && cached.content) {
-      console.log(
-        '📦 [getDisplayArtifact] Returning cached content for base artifact:',
-        artifactId,
-      );
+      // console.log(
+      //   '📦 [getDisplayArtifact] Returning cached content for base artifact:',
+      //   artifactId,
+      // );
       return {
         ...artifact,
         content: cached.content,
