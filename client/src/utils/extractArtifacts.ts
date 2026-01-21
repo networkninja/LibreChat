@@ -135,6 +135,7 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
           title: updatedTitle,
           type: originalArtifact.type,
           content: cleanedContent,
+          snippetContent: cleanedContent,
           messageId,
           index: originalArtifact.index,
           lastUpdateTime: timestamp,
@@ -154,20 +155,65 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
         .replace(/[()]/g, '')
         .toLowerCase();
 
-      const artifact = {
-        id,
-        identifier,
-        title: attributes.title,
-        type: attributes.type,
-        content: cleanedContent,
-        messageId,
-        index: matchCount - 1,
-        lastUpdateTime: Date.now(),
-        isUpdate: false,
-        ...attributes,
-      };
+      // CRITICAL: Check if this identifier already exists in the map
+      const existingArtifact = artifactMap.get(identifier);
 
-      artifactMap.set(identifier, artifact);
+      if (existingArtifact) {
+        console.warn('⚠️ [extractArtifacts] DUPLICATE artifact directive with same identifier!', {
+          identifier,
+          existingArtifactId: existingArtifact.id,
+          existingIsUpdate: existingArtifact.isUpdate,
+          newId: id,
+          matchCount,
+          PROBLEM: 'Second :::artifact with same identifier should be :::artifactupdate',
+          DECISION: 'Will treat this as an UPDATE artifact',
+        });
+
+        // Create an update artifact instead
+        const updateId = `${identifier}_update${matchCount - 1}_${attributes.type}_${attributes.title}`
+            .replace(/\s+/g, '_')
+            .replace(/\//g, '-')
+            .toLowerCase();
+
+        const updateArtifact = {
+          id: updateId,
+          identifier,
+          title: attributes.title,
+          type: attributes.type,
+          content: cleanedContent,
+          snippetContent: cleanedContent,
+          messageId,
+          index: matchCount - 1,
+          lastUpdateTime: Date.now(),
+          isUpdate: true,
+          ...attributes,
+        };
+
+        console.log('✅ [extractArtifacts] Converted duplicate to update artifact:', {
+          id: updateArtifact.id,
+          identifier: updateArtifact.identifier,
+          isUpdate: updateArtifact.isUpdate,
+        });
+
+        artifactMap.set(updateId, updateArtifact);
+      } else {
+         // First time seeing this identifier - create base artifact
+        const artifact = {
+          id,
+          identifier,
+          title: attributes.title,
+          type: attributes.type,
+          content: cleanedContent,
+          snippetContent: cleanedContent,
+          messageId,
+          index: matchCount - 1,
+          lastUpdateTime: Date.now(),
+          isUpdate: false,
+          ...attributes,
+        };
+
+        artifactMap.set(identifier, artifact);
+      }
 
       // CRITICAL DEBUG: Log if we're replacing an existing artifact (streaming scenario)
       const wasReplaced = artifactMap.has(identifier);

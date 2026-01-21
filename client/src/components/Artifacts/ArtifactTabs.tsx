@@ -43,17 +43,20 @@ export default function ArtifactTabs({
   const [_cacheHydrated, _setCacheHydrated] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true); // Track if this is initial load/refresh
 
-  const stateArtifact = _artifacts?.[artifact.id];
+  // CRITICAL: For BASE artifacts, use the prop directly (preserves original content)
+  // For UPDATE artifacts, use state (may have merged content)
+  // This ensures base artifacts are never modified by merge operations
+  const finalArtifact = artifact.isUpdate
+    ? (_artifacts?.[artifact.id] ?? artifact) // Update artifacts: prefer state
+    : artifact; // Base artifacts: always use prop (pristine original)
 
-  // FALLBACK: If not in state, use prop (for initial render before state is populated)
-  if (!stateArtifact) {
-    console.warn('⚠️ [ArtifactTabs] Artifact not in state yet - using prop as fallback:', {
+  console.log('🎯 [ArtifactTabs] Artifact source selection:', {
       artifactId: artifact.id,
-      propContent: artifact.content?.substring(0, 100),
-      NOTE: 'This should only happen during initial render',
-    });
-  }
-  const finalArtifact = stateArtifact ?? artifact;
+    isUpdate: artifact.isUpdate,
+    usingState: artifact.isUpdate && !!_artifacts?.[artifact.id],
+    usingProp: !artifact.isUpdate || !_artifacts?.[artifact.id],
+    finalContentLength: finalArtifact?.content?.length || 0,
+  });
 
   // Check if message is streaming (compute early to use in useMemo)
   // A message is streaming ONLY if explicitly marked as unfinished
@@ -139,7 +142,6 @@ export default function ArtifactTabs({
       // CRITICAL: ALWAYS merge if we have a base artifact, don't check if content differs
       // On refresh, artifact.content might be empty/partial, so we need to merge regardless
       if (originalArtifact && originalArtifact.content) {
-
         // Strategy 1: Check cache for previous artifact (already has merged content)
         // Strategy 2: If no cache, use originalArtifact.content (could be previous update or base)
         let baseContentForMerge = originalArtifact.content ?? '';
@@ -416,18 +418,42 @@ export default function ArtifactTabs({
   }, [mergedArtifact, setCurrentCode, currentCode]);
 
   const { submitMessage } = useSubmitMessage();
-  
-  // CRITICAL: Only call getDisplayArtifact when NOT streaming
-  // During streaming, use the artifact as-is to prevent rendering incomplete/duplicate content
+
   const displayArtifact = isMessageStreaming
     ? artifact
     : artifactCache.getDisplayArtifact(artifact.id, _artifacts || undefined) || artifact;
 
-  const content = artifact.isUpdate
-    ? (displayArtifact?.content ?? artifact.content ?? '')
-    : (mergedArtifact?.content ?? displayArtifact?.content ?? '');
+  const snippetContent = (artifact as any).snippetContent;
 
+  let content: string;
+  let contentSource: string;
 
+  if (artifact.isUpdate) {
+    // User clicked on an UPDATE artifact button - show CUMULATIVE merged content (base + all updates up to this point)
+    // Find the base artifact first
+    const baseArtifact = _artifacts
+      ? Object.values(_artifacts).find(
+          (a) => a && !a.isUpdate && a.identifier === artifact.identifier,
+        )
+      : null;
+
+    if (baseArtifact && _artifacts) {
+      // Use applyAllPartialUpdates to compute progressive merge up to this artifact
+      const cumulativeMergedContent = applyAllPartialUpdates(
+        baseArtifact.content || '',
+        _artifacts,
+        artifact.id,
+        false,
+        null,
+      );
+      content = cumulativeMergedContent || '';
+    } else {
+      // Fallback if base artifact not found
+      content = displayArtifact?.content ?? artifact.content ?? '';
+    }
+  } else {
+    content = artifact.content ?? '';
+  }
   const props = useArtifactProps({ artifact: displayArtifact });
   const files = { ...props.files };
   const fileKey = props.fileKey;
