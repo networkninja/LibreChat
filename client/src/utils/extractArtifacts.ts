@@ -34,9 +34,6 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
     // console.log('⚠️ [extractArtifacts] No message text provided');
     return [];
   }
-
-  // console.log('🔍 [extractArtifacts] Processing message text length:', messageText.length);
-
   // Regex to match both :::artifact and :::artifactupdate blocks
   const blockRegex = /:::(artifact(?:update)?)\s*\{([^}]*)\}:::\s*([\s\S]*?)\s*:::/g;
 
@@ -58,11 +55,8 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
       attributes[key] = value;
     }
 
-    // console.log('🔧 [extractArtifacts] Parsed attributes:', attributes);
-
     // Ensure we have required attributes
     if (!attributes.identifier || !attributes.title || !attributes.type) {
-      // console.log('⚠️ [extractArtifacts] Missing required attributes, using defaults');
       attributes.identifier = attributes.identifier || `artifact-${matchCount}`;
       attributes.title = attributes.title || `Untitled Artifact ${matchCount}`;
       attributes.type = attributes.type || type || 'code';
@@ -88,31 +82,25 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
       const originalArtifact = artifactMap.get(identifier);
 
       if (!originalArtifact) {
-        console.log(
-          '⚠️ [extractArtifacts] artifactupdate found but no original artifact exists, treating as new artifact',
-        );
-
-        // Create new artifact from update
-        const id = [identifier, 'artifact', attributes.title, messageId || '']
-          .join('_')
+        const updateId = `${identifier}_update${matchCount}_${messageId || Date.now()}`
           .replace(/\s+/g, '_')
           .replace(/[()]/g, '')
           .toLowerCase();
 
         const newArtifact = {
-          id,
+          id: updateId,
           identifier,
           title: attributes.title,
           type: attributes.type,
           content: cleanedContent,
           messageId,
-          index: matchCount - 1,
+          index: matchCount, 
           lastUpdateTime: Date.now(),
-          isUpdate: false,
+          isUpdate: true,
           ...attributes,
         };
 
-        artifactMap.set(identifier, newArtifact);
+        artifactMap.set(updateId, newArtifact); // ✅ Use updateId as key, not identifier
         continue; // Skip to next iteration
       }
 
@@ -125,35 +113,14 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
       const existingUpdate = artifactMap.get(updatedIdentifier);
 
       if (existingUpdate) {
-        // console.log(
-        //   '🔄 [extractArtifacts] Streaming update - REPLACING existing update artifact:',
-        //   {
-        //     identifier: updatedIdentifier,
-        //     oldContentLength: existingUpdate.content?.length || 0,
-        //     newContentLength: cleanedContent.length,
-        //     messageId,
-        //   },
-        // );
-
-        // During streaming, merge the new chunk with the ORIGINAL base artifact
-        // NOT with the previous update - this ensures we always show base + latest update
-        const mergedContent = applyIntelligentMerge(originalArtifact.content, cleanedContent);
-
         const updatedArtifact = {
           ...existingUpdate,
-          content: mergedContent, // MERGE with base, don't just use snippet
+          content: cleanedContent,
           lastUpdateTime: timestamp,
         };
 
         artifactMap.set(updatedIdentifier, updatedArtifact);
       } else {
-        // console.log('✨ [extractArtifacts] First update - Creating new update artifact:', {
-        //   identifier: updatedIdentifier,
-        //   contentLength: cleanedContent.length,
-        // });
-
-        // First time seeing this update - merge with original
-        const mergedContent = applyIntelligentMerge(originalArtifact.content, cleanedContent);
         const updatedTitle = `${originalArtifact.title}`;
 
         const updatedId = [updatedIdentifier, 'artifact', updatedTitle, messageId || '']
@@ -167,7 +134,7 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
           identifier: updatedIdentifier,
           title: updatedTitle,
           type: originalArtifact.type,
-          content: mergedContent,
+          content: cleanedContent,
           messageId,
           index: originalArtifact.index,
           lastUpdateTime: timestamp,
@@ -201,6 +168,17 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
       };
 
       artifactMap.set(identifier, artifact);
+
+      // CRITICAL DEBUG: Log if we're replacing an existing artifact (streaming scenario)
+      const wasReplaced = artifactMap.has(identifier);
+      if (wasReplaced) {
+        // console.log('🔄 [extractArtifacts] REPLACED existing artifact during streaming:', {
+        //   identifier,
+        //   previousContentLength: artifactMap.get(identifier)?.content?.length || 0,
+        //   newContentLength: content.length,
+        //   EXPECTED: 'New content should be LONGER (progressive streaming)',
+        // });
+      }
     }
   }
 

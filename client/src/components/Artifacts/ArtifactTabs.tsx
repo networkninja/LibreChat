@@ -40,16 +40,20 @@ export default function ArtifactTabs({
   const { data: startupConfig } = useGetStartupConfig();
   const { latestMessage: _latestMessage } = useChatContext();
   const [_artifacts, _setArtifacts] = useRecoilState(artifactsState);
-  // const [artifact, setArtifact] = useState<Artifact | null>(null);
-
-  // Cache state - must be before useMemo that uses it
-  // const lastIdRef = useRef<string | null>(null);
-  // const [_cacheInitialized, setCacheInitialized] = useState(false);
   const [_cacheHydrated, _setCacheHydrated] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true); // Track if this is initial load/refresh
 
-  // Get the artifact from state, or use the passed prop
-  const stateArtifact = _artifacts?.[artifact.id] ?? artifact;
+  const stateArtifact = _artifacts?.[artifact.id];
+
+  // FALLBACK: If not in state, use prop (for initial render before state is populated)
+  if (!stateArtifact) {
+    console.warn('⚠️ [ArtifactTabs] Artifact not in state yet - using prop as fallback:', {
+      artifactId: artifact.id,
+      propContent: artifact.content?.substring(0, 100),
+      NOTE: 'This should only happen during initial render',
+    });
+  }
+  const finalArtifact = stateArtifact ?? artifact;
 
   // Check if message is streaming (compute early to use in useMemo)
   // A message is streaming ONLY if explicitly marked as unfinished
@@ -80,42 +84,27 @@ export default function ArtifactTabs({
   const lastMergedResultRef = useRef<Artifact | null>(null);
   
   const mergedArtifact = React.useMemo(() => {
-    console.log('🔍 [mergedArtifact useMemo] Entry:', {
-      stateArtifactId: stateArtifact?.id,
-      stateArtifactIsUpdate: stateArtifact?.isUpdate,
-      stateArtifactIdentifier: stateArtifact?.identifier,
-      stateArtifactContentLength: stateArtifact?.content?.length,
-      lastComputedId: lastComputedIdRef.current,
-      hasLastMergedResult: !!lastMergedResultRef.current,
-      isMessageStreaming,
-      streamingCompleteTrigger, // Used to force re-merge when streaming completes
-    });
 
     if (isMessageStreaming || isSubmitting) {
       // Return raw artifact content during streaming - no merge, no cache
-      return stateArtifact;
+      return finalArtifact;
     }
 
-    // CRITICAL: Only recompute if artifact ID actually changed
-    // Use cache if same artifact and we have a previous result
-    if (stateArtifact?.id === lastComputedIdRef.current && lastMergedResultRef.current) {
-      console.log('✅ [mergedArtifact] Returning cached result for:', stateArtifact?.id);
-      return lastMergedResultRef.current;
+    if (!finalArtifact || !_artifacts) {
+      console.log('⚠️ [mergedArtifact] No finalArtifact or _artifacts');
+      return finalArtifact;
     }
 
-    if (!stateArtifact || !_artifacts) {
-      console.log('⚠️ [mergedArtifact] No stateArtifact or _artifacts');
-      return stateArtifact;
-    }
-
+    //if (!latestMessage?.content || !latestMessage.messageId) return;
     // If this is an update artifact, we need to merge all updates up to this point
-    if (stateArtifact.isUpdate) {
+    if (finalArtifact.isUpdate) {
       console.log('🔄 [mergedArtifact] This is an UPDATE artifact, need to merge');
-      const baseIdentifier = stateArtifact.identifier;
+      const baseIdentifier = finalArtifact.identifier;
 
+      // CRITICAL FIX: Find the MOST RECENT artifact (could be previous update or base)
       // This allows incremental merging instead of always going back to original base
       const currentUpdateIndex =
-        stateArtifact.index ?? parseInt(stateArtifact.id?.match(/_update(\d+)_/)?.[1] || '0', 10);
+        finalArtifact.index ?? parseInt(finalArtifact.id?.match(/_update(\d+)_/)?.[1] || '0', 10);
 
       // Get all artifacts with same identifier, sorted by index/time
       const relatedArtifacts = _artifacts
@@ -182,17 +171,17 @@ export default function ArtifactTabs({
         // Now apply THIS update to the base content (which could be cached previous merged result)
         const mergedContent = applyPartialUpdate(
           baseContentForMerge, // ✅ Use cached previous merged result OR base
-          stateArtifact.content ?? '', // New update snippet
-          stateArtifact.id,
+          finalArtifact.content ?? '', // New update snippet
+          finalArtifact.id,
           Object.keys(_artifacts).length,
           _artifacts,
         );
 
         const result = {
-          ...stateArtifact,
+          ...finalArtifact,
           content: mergedContent,
         };
-        lastComputedIdRef.current = stateArtifact.id;
+        lastComputedIdRef.current = finalArtifact.id;
         lastMergedResultRef.current = result;
 
         // CRITICAL: Set isInitialLoad to false after first successful merge
@@ -211,11 +200,11 @@ export default function ArtifactTabs({
     }
 
     // If it's not an update or we couldn't find the base, return as-is
-    console.log('⏭️ [mergedArtifact] Returning stateArtifact as-is');
-    return stateArtifact;
+    console.log('⏭️ [mergedArtifact] Returning finalArtifact as-is');
+    return finalArtifact;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    stateArtifact?.id, // Only depend on ID, not entire object
+    finalArtifact?.id, // Only depend on ID, not entire object
     isMessageStreaming,
     _artifacts,
     isInitialLoad,
@@ -400,20 +389,6 @@ export default function ArtifactTabs({
       console.log('[ArtifactTabs] useEffect: baseIdentifier:', baseIdentifier);
       console.log('[ArtifactTabs] useEffect: originalArtifact:', originalArtifact);
       if (originalArtifact && originalArtifact.content) {
-        // console.log(
-        //   '🟡🟡🟡 [CALL SITE 3: ArtifactTabs.tsx Line ~315] CALLING applyAllPartialUpdates:',
-        //   {
-        //     location: 'ArtifactTabs.tsx line ~315 - Update Artifact Display',
-        //     reason: 'Displaying update artifact with merged content',
-        //     baseArtifactId: originalArtifact.id,
-        //     targetArtifactId: artifact.id,
-        //     baseContentLength: originalArtifact.content.length,
-        //     allArtifactsCount: _artifacts ? Object.keys(_artifacts).length : 0,
-        //     isStreaming: false,
-        //     conversationId: null,
-        //     STACK_TRACE: new Error().stack?.split('\n').slice(1, 5).join('\n'),
-        //   },
-        // );
 
         const mergedContent = applyAllPartialUpdates(
           originalArtifact.content,
@@ -448,11 +423,10 @@ export default function ArtifactTabs({
     ? artifact
     : artifactCache.getDisplayArtifact(artifact.id, _artifacts || undefined) || artifact;
 
-  // CRITICAL: On page refresh, displayArtifact has the freshly computed merged content
-  // from getDisplayArtifact(), which should take priority over stale mergedArtifact
-  // Use displayArtifact if it has isMerged=true (indicating fresh merge from getDisplayArtifact)
-  // HOWEVER: During streaming and normal operation, use mergedArtifact.content directly
-  const content = mergedArtifact?.content ?? displayArtifact?.content ?? '';
+  const content = artifact.isUpdate
+    ? (displayArtifact?.content ?? artifact.content ?? '')
+    : (mergedArtifact?.content ?? displayArtifact?.content ?? '');
+
 
   const props = useArtifactProps({ artifact: displayArtifact });
   const files = { ...props.files };
@@ -466,7 +440,6 @@ export default function ArtifactTabs({
   }
   const contentRef = useRef<HTMLDivElement>(null);
   useAutoScroll({ ref: contentRef, content, isSubmitting });
-
 
   // Helper function to get language from artifact type
   const getLanguageFromType = (type?: string): string => {
@@ -529,7 +502,7 @@ CRITICAL RULES (follow in this order):
             files={files}
             fileKey={fileKey}
             template={template}
-            artifact={mergedArtifact || displayArtifact}
+            artifact={displayArtifact}
             editorRef={editorRef}
             sharedProps={sharedProps}
             onSelectionSubmit={handleSelectionSubmit}

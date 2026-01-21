@@ -125,14 +125,8 @@ export default function Presentation({ children }: { children: React.ReactNode }
       artifactsCount: Object.keys(artifacts ?? {}).length,
       artifactKeys: Object.keys(artifacts ?? {}),
       hasArtifacts,
-      willRender: artifactsVisibility === true && !isNewConversation && hasArtifacts,
+      willRender: artifactsVisibility === true && hasArtifacts,
     });
-
-    // CRITICAL: Never show artifacts for new conversations
-    if (isNewConversation) {
-      console.log('🆕 [Presentation] New conversation - hiding artifacts panel');
-      return null;
-    }
 
     // SAFETY: Only show panel if visibility is true AND there are actual artifacts
     if (artifactsVisibility === true && hasArtifacts) {

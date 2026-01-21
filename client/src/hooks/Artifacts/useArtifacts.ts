@@ -68,10 +68,6 @@ export default function useArtifacts() {
         );
         try {
           await artifactCache.loadConversationCache(conversationId);
-          // console.log(
-          //   '✅ [useArtifacts] Cache loaded successfully - selection cache size:',
-          //   artifactCache._selectionCache.size,
-          // );
           setCacheLoaded(true);
         } catch (error) {
           console.error('Failed to load conversation cache from database:', error);
@@ -152,6 +148,7 @@ export default function useArtifacts() {
     );
   }, [artifacts]);
 
+  const prevIsSubmittingRef = useRef<boolean>(false);
   const lastContentRef = useRef<string | null>(null);
   const hasEnclosedArtifactRef = useRef<boolean>(false);
   const hasAutoSwitchedToCodeRef = useRef<boolean>(false);
@@ -171,6 +168,7 @@ export default function useArtifacts() {
       lastRunMessageIdRef.current = null;
       lastContentRef.current = null;
       hasEnclosedArtifactRef.current = false;
+      hasAutoSwitchedToCodeRef.current = false;
       pendingArtifactUpdateRef.current = false;
       refreshedArtifactsRef.current.clear(); // Clear refresh tracking on conversation change
 
@@ -220,10 +218,6 @@ export default function useArtifacts() {
       console.log('Starting new conversation, resetting artifacts');
       resetState();
     } else {
-      // console.log(
-      //   '🔄 [useArtifacts] STEP 3: Page refresh detected, loading artifacts for conversation:',
-      //   conversationId,
-      // );
 
       // CRITICAL: Only load artifacts AFTER cache is ready
       // This ensures selection contexts are available when artifacts are merged

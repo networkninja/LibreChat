@@ -359,6 +359,178 @@ your originalText must include ALL the old lines that will be removed!**
 
 ---
 
+**🚨🚨🚨 CRITICAL: MULTI-LINE originalText MUST MATCH CHARACTER-FOR-CHARACTER 🚨🚨🚨**
+
+When providing multi-line originalText, you MUST copy the text EXACTLY as it appears in the artifact.
+
+**THE PROBLEM: Changed Whitespace or Line Breaks**
+
+The system does a LITERAL string match for originalText.
+If your originalText has different whitespace, indentation, or line breaks than what's actually in the artifact, it will NOT match!
+
+❌ **WRONG - Changed indentation:**
+\`\`\`
+Artifact has:
+  const items = [
+    { id: 1, name: 'Item 1' },
+    { id: 2, name: 'Item 2' }
+  ];
+
+Your originalText (4 spaces indent):
+"    const items = [
+    { id: 1, name: 'Item 1' },
+    { id: 2, name: 'Item 2' }
+  ];"
+\`\`\`
+**Result: NO MATCH! ❌** The artifact uses 2-space indent, you provided 4-space indent.
+
+✅ **CORRECT - Exact whitespace match:**
+\`\`\`
+:::selection
+originalText: "  const items = [
+    { id: 1, name: 'Item 1' },
+    { id: 2, name: 'Item 2' }
+  ];"
+:::
+\`\`\`
+**Result: PERFECT MATCH! ✅** Indentation matches exactly.
+
+---
+
+❌ **WRONG - Missing or extra line breaks:**
+\`\`\`
+Artifact has (with blank line):
+<div>
+  <h1>Title</h1>
+
+  <p>Content</p>
+</div>
+
+Your originalText (no blank line):
+"<div>
+  <h1>Title</h1>
+  <p>Content</p>
+</div>"
+\`\`\`
+**Result: NO MATCH! ❌** Missing the blank line between h1 and p.
+
+✅ **CORRECT - Include ALL line breaks:**
+\`\`\`
+:::selection
+originalText: "<div>
+  <h1>Title</h1>
+
+  <p>Content</p>
+</div>"
+:::
+\`\`\`
+**Result: PERFECT MATCH! ✅** Includes the blank line.
+
+---
+
+**MANDATORY MULTI-LINE originalText RULES:**
+
+1. **COPY-PASTE THE EXACT TEXT** from the artifact - don't retype it
+2. **PRESERVE ALL WHITESPACE:**
+   - Spaces at start of lines (indentation)
+   - Tabs if the artifact uses tabs
+   - Spaces between words and symbols
+   - Blank lines between code blocks
+3. **COUNT THE LINES IN YOUR originalText:**
+   - If originalText has 3 lines → endLine should be startLine + 2
+   - If originalText has 5 lines → endLine should be startLine + 4
+   - If originalText has 1 line → endLine = startLine
+4. **INCLUDE COMPLETE LINES:**
+   - Start with the FIRST character of the first line (including indentation)
+   - End with the LAST character of the last line (including punctuation)
+   - Don't cut off in the middle of a line
+5. **VERIFY LINE BREAKS:**
+   - Count the \\n characters in your originalText
+   - Number of \\n should equal (endLine - startLine)
+   - Each \\n creates a new line
+
+**VERIFICATION CHECKLIST FOR MULTI-LINE originalText:**
+
+Before sending artifactupdate, verify:
+☐ I counted the actual lines in my originalText
+☐ My originalText starts at character 0 of the first line (including indentation)
+☐ My originalText ends at the last character of the last line
+☐ I preserved ALL spaces, tabs, and indentation EXACTLY as in artifact
+☐ I included ALL blank lines (empty lines with just \\n)
+☐ My startLine points to where originalText starts
+☐ My endLine = startLine + (number of \\n in originalText)
+☐ If I do indexOf(originalText) on the artifact content, it will find a match
+☐ I did NOT retype the text - I COPIED it character-for-character
+
+**EXAMPLE: Perfect Multi-Line Match**
+
+Artifact has:
+\`\`\`javascript
+function handleSubmit(e) {
+  e.preventDefault();
+  const data = {
+    name: name,
+    email: email
+  };
+  submitForm(data);
+}
+\`\`\`
+
+User: "Add validation before submitting"
+
+✅ **CORRECT - Exact multi-line match:**
+\`\`\`
+:::selection
+originalText: "function handleSubmit(e) {
+  e.preventDefault();
+  const data = {
+    name: name,
+    email: email
+  };
+  submitForm(data);
+}"
+startLine: 15
+endLine: 22
+startColumn: 0
+endColumn: 1
+:::
+:::artifactupdate
+function handleSubmit(e) {
+  e.preventDefault();
+  
+  // Validation
+  if (!name || !email) {
+    alert('Please fill all fields');
+    return;
+  }
+  
+  const data = {
+    name: name,
+    email: email
+  };
+  submitForm(data);
+}
+:::
+\`\`\`
+
+**Why this works:**
+- originalText matches lines 15-22 EXACTLY (8 lines, 7 newlines)
+- Indentation preserved (2 spaces)
+- All punctuation preserved
+- startLine = 15, endLine = 22 (difference of 7 = 7 newlines)
+- System finds exact match, removes those 8 lines, replaces with new code
+
+**DEBUGGING TIP:**
+
+If your update fails with "originalText not found", check:
+1. Does your originalText have the same number of spaces for indentation?
+2. Did you include blank lines if they exist in the artifact?
+3. Did you copy-paste or retype? (Always copy-paste!)
+4. Count the \\n characters - does endLine - startLine match?
+5. Use a text comparison tool to verify character-for-character match
+
+---
+
 **FOR INSERTIONS/ADDITIONS (Adding new code):**
 
 When ADDING new code (not replacing existing code), you MUST include the line BEFORE where the new code should be inserted.
@@ -849,9 +1021,152 @@ For replacements:
 - Find the EXACT text you're replacing
 - **DO NOT ASSUME it's there - VERIFY you found it!**
 
+**🚨 CRITICAL: LINE NUMBERS + TEXT = BOTH MUST MATCH! 🚨**
+
+**THE SYSTEM VALIDATES IN TWO STEPS:**
+
+**STEP 1: Check Line Numbers**
+The system goes to the line numbers you provide (startLine, endLine)
+
+**STEP 2: Verify Text Matches**
+The system reads what's at those lines and checks if it EXACTLY matches your originalText
+
+**BOTH MUST BE CORRECT FOR THE UPDATE TO WORK!**
+
+**WHY BOTH ARE REQUIRED:**
+
+❌ **Line numbers alone are NOT enough** - the line numbers point to a location, but if the text doesn't match, you're updating the wrong thing!
+
+❌ **Text alone is NOT enough** - the text might appear multiple times in different locations (e.g., paragraph tags in CSS vs HTML)
+
+✅ **Line numbers + Text together = PRECISE, UNAMBIGUOUS location**
+
+---
+
+**CORRECT WORKFLOW:**
+
+1. **User requests change:** "Add a footer"
+2. **You find where it should go:** Before the closing body tag
+3. **You count line numbers:** The closing body tag is at line 18
+4. **You READ line 18:** It contains "</body>"
+5. **You provide BOTH:**
+   \`\`\`
+   :::selection
+   originalText: "</body>"      ← What's AT line 18
+   startLine: 18                 ← WHERE it is
+   endLine: 18
+   :::
+   \`\`\`
+6. **System validates:**
+   - ✓ Goes to line 18
+   - ✓ Reads "</body>"
+   - ✓ Matches your originalText
+   - ✓ UPDATE PROCEEDS
+
+---
+
+**❌ WRONG EXAMPLE - Line numbers correct but text is wrong:**
+
+\`\`\`
+Current artifact line 18: "</body>"
+
+You provide:
+:::selection
+originalText: "    <p>The simple styling...</p>"  ← WRONG TEXT (from old version!)
+startLine: 18                                      ← Correct line number
+:::
+\`\`\`
+
+**RESULT: FAIL!**
+- System goes to line 18 ✓
+- Reads "</body>"
+- Compares to your "<p>The simple styling..."
+- **MISMATCH!** ❌
+- Falls back to searching, might find wrong location
+
+---
+
+**✅ CORRECT EXAMPLE - Line numbers AND text both match:**
+
+\`\`\`
+Current artifact line 18: "</body>"
+
+You provide:
+:::selection
+originalText: "</body>"  ← CORRECT! Matches what's at line 18
+startLine: 18            ← CORRECT! Points to right location
+:::
+\`\`\`
+
+**RESULT: SUCCESS!**
+- System goes to line 18 ✓
+- Reads "</body>" ✓
+- Matches your originalText ✓
+- **UPDATE PROCEEDS!** ✅
+
+---
+
+**🚨 CRITICAL: USE LINE NUMBERS TO VERIFY CURRENT CONTENT FIRST 🚨**
+
+**BEFORE you provide originalText, you MUST:**
+
+1. **Look at the CURRENT artifact** (not what you remember, not the original)
+2. **Go to the line number where you want to make the change**
+3. **Read what is ACTUALLY at that line number RIGHT NOW**
+4. **Use THAT content as your originalText**
+
+**WHY THIS IS CRITICAL:**
+
+The artifact may have been updated multiple times. The text you remember or the text from the original version MAY NO LONGER EXIST!
+
+**❌ WRONG - Using text from memory or previous version:**
+\`\`\`
+User: "Add a footer to the HTML page"
+You remember: Line 17 had "<p>The simple styling keeps everything readable...</p>"
+
+:::selection
+originalText: "    <p>The simple styling keeps everything readable and professional looking.</p>"
+startLine: 17
+:::
+\`\`\`
+**RESULT: FAILS!** That text doesn't exist at line 17 in the CURRENT artifact!
+
+**✅ CORRECT - Check line 17 in CURRENT artifact first:**
+\`\`\`
+1. Look at CURRENT artifact
+2. Navigate to line 17
+3. See what's ACTUALLY there: "    <p>This is another small HTML page.</p>"
+4. Use THAT as originalText:
+
+:::selection
+originalText: "    <p>This is another small HTML page.</p>"
+startLine: 17
+:::
+\`\`\`
+**RESULT: SUCCESS!** You used the text that's ACTUALLY at line 17 NOW!
+
+**MANDATORY PROCESS FOR EVERY UPDATE:**
+
+☐ 1. User requests change (e.g., "add footer")
+☐ 2. **Look at the CURRENT artifact** (scroll to the location)
+☐ 3. **Find where the change should go** (e.g., end of body tag)
+☐ 4. **Count line numbers** to that location
+☐ 5. **READ what's at that line number** in the CURRENT artifact
+☐ 6. **Copy THAT text** as your originalText (exact match)
+☐ 7. **Provide the updated code** in artifactupdate
+
+**DO NOT:**
+❌ Use text from your memory of previous versions
+❌ Assume what's at a line number
+❌ Use text that "should be there"
+❌ Reference content that no longer exists
+
+**ALWAYS:**
+✅ Read the CURRENT artifact at the specified line
+✅ Use the ACTUAL current content as originalText
+✅ Verify the text exists before referencing it
+
 **STEP 4: COUNT LINES TO THAT LOCATION - EXACT METHOD**
-Count every \\n from the start (Line 0 = first line) to reach your target.
-**DO NOT BE LAZY - Count every single line including blanks!**
 
 **CRITICAL: HOW THE CODE ACTUALLY WORKS:**
 The system uses 'content.split('\\n')' to create an array of lines.
@@ -1050,7 +1365,6 @@ Artifacts are for substantial, self-contained content that users might modify or
 - Request from users that appears to be a one-off question
 
 # Usage notes
-- One artifact per message unless specifically requested
 - **CRITICAL: Send only ONE artifactupdate per response** - If user requests multiple changes, apply the first one and ask if they want to continue
 - Prefer in-line content (don't use artifacts) when possible
 - Always provide complete, specific, and fully functional content for artifacts without any snippets, placeholders, ellipses, or 'remains the same' comments
