@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import debounce from 'lodash/debounce';
 import { useLocation } from 'react-router-dom';
-import { useRecoilState, useSetRecoilState } from 'recoil';
+import { useRecoilState, useSetRecoilState, useResetRecoilState } from 'recoil';
 import type { Artifact } from '~/common';
 import FilePreview from '~/components/Chat/Input/Files/FilePreview';
 import { cn, getFileType, logger } from '~/utils';
@@ -22,39 +22,17 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
   const currentConversationId = location.pathname.match(/\/c\/([^/]+)/)?.[1] || null;
 
   const debouncedSetVisibleRef = useRef(
-    debounce(
-      (artifactToSet: Artifact, currentVisible: Record<string, Artifact | undefined> | null) => {
-        // Guard: Only update if the artifact is not already visible or has changed
-        console.log("existingArtifact:", currentVisible, artifactToSet);
-        if (currentVisible) {
-          const existingArtifact = currentVisible[artifactToSet.id];
-          console.log(
-            'existingArtifact content:',
-            existingArtifact?.content,
-            artifactToSet.content,
-          );
-          // if (existingArtifact && existingArtifact.content === artifactToSet.content) {
-          //   console.log(
-          //     'artifacts_visibility',
-          //     'Skipping update - artifact already visible with same content',
-          //     artifactToSet.id,
-          //   );
-          //   return;
-          // }
-        }
-
-        console.log(
-          'artifacts_visibility',
-          'Setting artifact to visible state from Artifact button',
-          artifactToSet,
-        );
-        setVisibleArtifacts((prev) => ({
-          ...prev,
-          [artifactToSet.id]: artifactToSet,
-        }));
-      },
-      100,
-    ),
+    debounce((artifactToSet: Artifact) => {
+      logger.log(
+        'artifacts_visibility',
+        'Setting artifact to visible state from Artifact button',
+        artifactToSet,
+      );
+      setVisibleArtifacts((prev) => ({
+        ...prev,
+        [artifactToSet.id]: artifactToSet,
+      }));
+    }, 750),
   );
 
   useEffect(() => {
@@ -62,12 +40,12 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
       return;
     }
 
-    // if (!isArtifactRoute(location.pathname)) {
-    //   return;
-    // }
+    if (!location.pathname.includes('/c/')) {
+      return;
+    }
 
     const debouncedSetVisible = debouncedSetVisibleRef.current;
-    debouncedSetVisible(artifact, visibleArtifacts);
+    debouncedSetVisible(artifact);
     return () => {
       debouncedSetVisible.cancel();
     };

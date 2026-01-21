@@ -14,6 +14,7 @@ export interface Artifact {
   originalIdentifier?: string;
   language?: string;
   content?: string;
+  snippetContent?: string;
   title?: string;
   type?: string;
   updatedContent?: string;

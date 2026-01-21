@@ -293,20 +293,6 @@ export default function ArtifactTabs({
         );
       }
       if (originalArtifact && originalArtifact.content) {
-        // console.log(
-        //   '🟡🟡🟡 [CALL SITE 3: ArtifactTabs.tsx Line ~315] CALLING applyAllPartialUpdates:',
-        //   {
-        //     location: 'ArtifactTabs.tsx line ~315 - Update Artifact Display',
-        //     reason: 'Displaying update artifact with merged content',
-        //     baseArtifactId: originalArtifact.id,
-        //     targetArtifactId: artifact.id,
-        //     baseContentLength: originalArtifact.content.length,
-        //     allArtifactsCount: _artifacts ? Object.keys(_artifacts).length : 0,
-        //     isStreaming: false,
-        //     conversationId: null,
-        //     STACK_TRACE: new Error().stack?.split('\n').slice(1, 5).join('\n'),
-        //   },
-        // );
 
         const mergedContent = applyAllPartialUpdates(
           originalArtifact.content,
@@ -377,7 +363,6 @@ export default function ArtifactTabs({
   }
   const contentRef = useRef<HTMLDivElement>(null);
   useAutoScroll({ ref: contentRef, content, isSubmitting });
-
 
   // Helper function to get language from artifact type
   const getLanguageFromType = (type?: string): string => {
