@@ -103,9 +103,17 @@ export default function ModelPanel({
     const overriddenParams = endpointsConfig[providerCheck]?.customParams?.paramDefinitions ?? [];
     const overriddenParamsMap = keyBy(overriddenParams, 'key');
     
-    return defaultParams
+    const allParameters = defaultParams
       .filter((param) => param != null)
       .map((param) => (overriddenParamsMap[param.key] as SettingDefinition) ?? param);
+
+    // Filter out specific parameters
+    const parametersToRemove = ['web_search'];
+    const filteredParameters = allParameters.filter(
+      setting => !parametersToRemove.includes(setting.key)
+    );
+        
+    return filteredParameters;
   }, [endpointType, endpointsConfig, model, provider, thinkingModelsRegex]);
 
   const setOption = (optionKey: keyof t.AgentModelParameters) => (value: t.AgentParameterValue) => {
