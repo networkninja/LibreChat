@@ -48,7 +48,7 @@ export const artifactPlugin: Pluggable = () => {
             n.children.forEach((child: any) => {
               text += extractTextRecursive(child);
               // Add newlines between paragraphs for proper formatting
-              if (child.type === 'paragraph' || child.type === 'break') {
+              if (child.type === 'paragraph') {
                 text += '\n';
               }
             });
@@ -1064,16 +1064,10 @@ export function Artifact({
         const displayArtifact = {
           ...updateArtifact,
           content: finalContent, // ALWAYS use merged content for display
-          snippetContent: content, // 🔥 CRITICAL: Store the ORIGINAL SNIPPET for re-merging
+          snippetContent: content,
           isMerged: !artifactsContext.isSubmitting && !noMergeHappened, // Only mark as merged if merge succeeded (using isSubmitting)
         };
-
-        // CRITICAL: Only save to state if we actually performed a merge or this is the first save
-        // Skipping re-saves prevents unnecessary re-renders and duplicate merges
         if (!shouldSkipMerge) {
-          // CRITICAL FIX: Save SNIPPET-ONLY artifact to state for cumulative updates
-          // The merged content should be computed on-demand by getDisplayArtifact()
-          // Saving merged content here causes it to be used as input for next update!
         setArtifacts((prevArtifacts) => {
             const status = _isStreaming ? 'STREAMING (live update)' : 'COMPLETE (final)';
             console.log(`💾 [Artifact] Storing SNIPPET-ONLY content (${status}):`, updateArtifactKey, {
@@ -1085,7 +1079,7 @@ export function Artifact({
           });
           return {
             ...prevArtifacts,
-              [updateArtifactKey]: updateArtifact, // ✅ Save SNIPPET only, not merged content!
+              [updateArtifactKey]: updateArtifact,
           };
         });
         }
@@ -1335,7 +1329,20 @@ export function Artifact({
 
   // --- NEW: Update local artifact state when selected artifact changes ---
   useEffect(() => {
-    if (_currentArtifactId && _artifacts && _artifacts[_currentArtifactId]) {
+
+    if (!_currentArtifactId || !_artifacts || !_artifacts[_currentArtifactId]) {
+      // No artifact is currently selected, nothing to reconstruct
+      return;
+    }
+
+    if (!artifact) {
+      return;
+    }
+
+    if (artifact.id !== _currentArtifactId) {
+      return;
+    }
+
       const loadedArtifact = _artifacts[_currentArtifactId];
       const isPageRefresh =
         loadedArtifact.lastUpdateTime && Date.now() - loadedArtifact.lastUpdateTime > 2000;
@@ -1411,7 +1418,6 @@ export function Artifact({
         );
       }
 
-      // If this is an update artifact, check CACHE FIRST before merging
       if (loadedArtifact.isUpdate) {
         console.log('🔄 [Cache Reconstruction] Update artifact detected - checking cache FIRST');
         
@@ -1439,10 +1445,7 @@ export function Artifact({
             content: cachedMergedContent.content,
             isMerged: true,
           };
-
-          // CRITICAL: Only update LOCAL state to avoid infinite loop
           setArtifact(cachedArtifact);
-          // CRITICAL: Set this as the current artifact so it's displayed
           setCurrentArtifactId(cachedArtifact.id);
           // DO NOT call setArtifacts - causes infinite loop!
           lastReconstructedArtifactId.current = _currentArtifactId;
@@ -1862,15 +1865,6 @@ export function Artifact({
           setArtifact(baseArtifactWithUpdates);
           setCurrentArtifactId(baseArtifact.id);
 
-          console.log(
-            '✅ [Cache Reconstruction] Set BASE artifact as current with merged content:',
-            {
-              baseArtifactId: baseArtifact.id,
-              updateArtifactId: loadedArtifact.id,
-              mergedContentLength: mergedContent.length,
-              DISPLAY: 'Showing base WITH all updates applied',
-            },
-          );
 
           // Mark this artifact as processed to prevent re-processing
           lastReconstructedArtifactId.current = _currentArtifactId;
@@ -1886,22 +1880,8 @@ export function Artifact({
 
       // Mark this artifact as processed
       lastReconstructedArtifactId.current = _currentArtifactId;
-    }
   }, [_currentArtifactId, _artifacts, setArtifacts, conversationId, setCurrentArtifactId]);
 
-  useEffect(() => {
-    if (artifact && _artifacts && _artifacts[artifact.id]) {
-      const globalArtifact = _artifacts[artifact.id];
-
-      // Type guard to ensure globalArtifact exists
-      if (!globalArtifact) return;
-
-      // Only update if content has actually changed to avoid infinite loops
-      if (globalArtifact.content !== artifact.content) {
-        setArtifact(globalArtifact);
-      }
-    }
-  }, [_artifacts, artifact]);
 
   // --- Main effect: Process artifact creation and updates ---
   useEffect(() => {
@@ -2012,10 +1992,7 @@ export function Artifact({
     }
   }, [displayArtifact, artifact, isArtifactUpdateNode, setArtifacts, _artifacts]);
 
-  // Use the original artifact from global state instead of the merged local artifact
-  // This ensures chat history buttons show the correct historical version
-  const originalArtifact = artifact?.id ? _artifacts?.[artifact.id] : artifact;
-  return <ArtifactButton artifact={originalArtifact || artifact} />;
+  return <ArtifactButton artifact={artifact} />;
 }
 
 // Selection component to parse and save selection context BEFORE artifact updates
