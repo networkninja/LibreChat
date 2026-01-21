@@ -33,93 +33,7 @@ function _sanitizeMergeResult(content: string): string {
     });
   }
 
-  // Log if any fixes were applied
-  if (fixed !== content) {
-    console.log('✅ [SANITIZE] Applied merge artifact fixes:', {
-      originalLength: content.length,
-      fixedLength: fixed.length,
-      charsDiff: fixed.length - content.length,
-    });
-  }
-
   return fixed;
-}
-
-// --- Sanitizer: removes duplicate closing tags, orphan style fragments, dangling tails, duplicated <p> blocks, and DUPLICATE DOCTYPE/HTML ---
-function _sanitizeArtifactContent(html: string): string {
-  if (!html) return html;
-  let out = html;
-
-  const doctypeMatches = out.match(/<!DOCTYPE[^>]*>/gi);
-  if (doctypeMatches && doctypeMatches.length > 1) {
-    console.log('🧹 [sanitize] Found duplicate DOCTYPE declarations:', doctypeMatches.length);
-    // Keep only the first DOCTYPE, remove all others
-    const firstDoctype = doctypeMatches[0];
-    out = out.replace(/<!DOCTYPE[^>]*>/gi, ''); // Remove all
-    out = firstDoctype + out; // Add first one back at the start
-  }
-
-  const htmlOpenMatches = out.match(/<html[^>]*>/gi);
-  if (htmlOpenMatches && htmlOpenMatches.length > 1) {
-    console.log('🧹 [sanitize] Found duplicate <html> opening tags:', htmlOpenMatches.length);
-    let foundFirst = false;
-    out = out.replace(/<html[^>]*>/gi, (match) => {
-      if (!foundFirst) {
-        foundFirst = true;
-        return match; // Keep first
-      }
-      return ''; // Remove duplicates
-    });
-  }
-
-  // Deduplicate closing tags
-  out = out.replace(/<\/body>\s*<\/body>/gi, '</body>').replace(/<\/html>\s*<\/html>/gi, '</html>');
-
-  const htmlCloseMatches = out.match(/<\/html>/gi);
-  if (htmlCloseMatches && htmlCloseMatches.length > 1) {
-    console.log('🧹 [sanitize] Found duplicate </html> closing tags:', htmlCloseMatches.length);
-    // Remove all but the last one
-    let count = 0;
-    const totalMatches = htmlCloseMatches.length;
-    out = out.replace(/<\/html>/gi, () => {
-      count++;
-      if (count < totalMatches) {
-        return ''; // Remove all except last
-      }
-      return '</html>'; // Keep last one
-    });
-  }
-
-  // Remove orphan attribute/style fragment lines (e.g., "yle=\"...")
-  out = out
-    .split('\n')
-    .filter((l) => !/^\s*:?(y?le)="[^"]*$/.test(l.trim()))
-    .filter((l) => !/^(y?le)="[^"]*/.test(l.trim()))
-    .join('\n');
-
-  // Cut off anything after final </html>
-  const htmlCloseIdx = out.toLowerCase().lastIndexOf('</html>');
-  if (htmlCloseIdx !== -1) {
-    out = out.slice(0, htmlCloseIdx + 7);
-  }
-
-  // Deduplicate identical <p> lines inside body
-  out = out.replace(/(<body[^>]*>)([\s\S]*?)(<\/body>)/i, (_, open, inner, close) => {
-    const seen = new Set<string>();
-    const cleaned = inner
-      .split('\n')
-      .filter((line) => {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('<p')) return true;
-        if (seen.has(trimmed)) return false;
-        seen.add(trimmed);
-        return true;
-      })
-      .join('\n');
-    return open + cleaned + close;
-  });
-
-  return out;
 }
 
 export async function ensureArtifactCacheHydrated(
@@ -142,19 +56,6 @@ export function applyPartialUpdate(
   // --- NEW HELPERS (dedupe & body replacement) ---
   const isFullDoc = (c: string) => /<!DOCTYPE|<html|<head>|<body>/i.test(c);
   const isSnippet = (c: string) => !isFullDoc(c) && /<p[ >]/i.test(c);
-  const _normalizeSnippet = (c: string) => c.trim().replace(/\n{2,}/g, '\n');
-  const _extractBody = (c: string) => {
-    const start = c.search(/<body[^>]*>/i);
-    const end = c.search(/<\/body>/i);
-    if (start === -1 || end === -1) return null;
-    const bodyTagClose = c.indexOf('>', start) + 1;
-    return {
-      prefix: c.slice(0, bodyTagClose),
-      bodyContent: c.slice(bodyTagClose, end),
-      suffix: c.slice(end),
-    };
-  };
-  // --- END HELPERS ---
   artifactId = artifactId.toLowerCase();
   const baseIdentifier = artifactId.split('_update')[0];
   const isUpdateArtifact = artifactId.includes('_update');
@@ -163,13 +64,7 @@ export function applyPartialUpdate(
     console.log('No changes detected, skipping update.', artifactId);
     return originalContent;
   }
-  // QUICK full replacement short-circuit
-  const updateRatio = updateContent.length / (originalContent.length || 1);
-  console.log('📊 Update size ratio:', { updateRatio });
 
-  // SPECIAL CASE: Original is full doc, incoming is a snippet
-  // Check if we have selection context - if yes, use it for precise placement
-  // If no, STRICT MODE: return original (don't append without selection!)
   if (isFullDoc(originalContent) && isSnippet(updateContent)) {
 
     // STRATEGY: Try to find selection context first for precise placement
@@ -197,8 +92,46 @@ export function applyPartialUpdate(
     }
   }
 
-  // This prevents unwanted spaces when merging snippets into the artifact
-  const trimmedUpdateContent = updateContent.trim();
+  // CRITICAL: Normalize indentation between originalText and updateContent
+  // The LLM might provide different indentation in the selection vs the actual code
+  // We need to detect and preserve the RELATIVE indentation structure
+  
+  // Get leading whitespace from first line of both texts
+  const getLeadingWhitespace = (text: string) => {
+    const firstLine = text.split('\n')[0];
+    const match = firstLine.match(/^(\s*)/);
+    return match ? match[1] : '';
+  };
+  
+  const originalLeadingWS = getLeadingWhitespace(originalContent);
+  const updateLeadingWS = getLeadingWhitespace(updateContent);
+  
+  // If indentation differs, normalize updateContent to match originalContent's indentation
+  let normalizedUpdateContent = updateContent;
+  if (originalLeadingWS !== updateLeadingWS && originalLeadingWS.length > 0) {
+    // Remove updateContent's leading whitespace and replace with originalContent's
+    const updateLines = updateContent.split('\n');
+    const normalizedLines = updateLines.map((line, index) => {
+      // Only adjust first line's indentation to match
+      if (index === 0 && line.startsWith(updateLeadingWS)) {
+        return originalLeadingWS + line.substring(updateLeadingWS.length);
+      }
+      return line;
+    });
+    normalizedUpdateContent = normalizedLines.join('\n');
+
+    console.log('🔧 [applyPartialUpdate] Normalized indentation mismatch:', {
+      originalLeadingWS: JSON.stringify(originalLeadingWS),
+      updateLeadingWS: JSON.stringify(updateLeadingWS),
+      originalFirstLine: originalContent.split('\n')[0].substring(0, 50),
+      updateFirstLine: updateContent.split('\n')[0].substring(0, 50),
+      normalizedFirstLine: normalizedUpdateContent.split('\n')[0].substring(0, 50),
+      FIX: 'Adjusted updateContent indentation to match originalContent',
+    });
+  }
+
+  // Now trim trailing whitespace only (preserve leading for proper merging)
+  const trimmedUpdateContent = normalizedUpdateContent.trimEnd();
 
   console.log('🔧 [applyPartialUpdate] Starting update:', {
     artifactId,
@@ -217,8 +150,6 @@ export function applyPartialUpdate(
   artifactId = artifactId.toLowerCase();
 
   if (artifactCache._selectionCache.size === 0) {
-
-    // Try to load from database as a fallback (this is sync in the sense that we log it, but won't block)
     artifactCache._loadFromDatabase(artifactId).then(() => {
       console.log(
         '📥 [applyPartialUpdate] Emergency database load completed, cache size now:',
@@ -232,7 +163,6 @@ export function applyPartialUpdate(
 
   // Strategy 1: Try cached selection context for this artifact first
   let cachedSelection = artifactCache.getSelection(artifactId);
-  console.log('artifactCache for selection', cachedSelection);
   const cachedSelectiontest = artifactCache._loadFromDatabase(artifactId);
 
   // Strategy 1.5: If this is an update artifact and no selection found, try the base identifier
@@ -243,12 +173,8 @@ export function applyPartialUpdate(
   // Strategy 1.75: Search by identifier substring match (most flexible)
   // This handles cases where the selection key has a timestamp or other suffix
   if (!cachedSelection && (baseIdentifier || artifactId)) {
-    const _searchIdentifier = baseIdentifier || artifactId.split('_update')[0];
-
-    // Each update (update0, update1, update2...) should have its OWN selection context
     const updateIndexMatch = artifactId.match(/_update(\d+)_/);
     const updateIndex = updateIndexMatch ? parseInt(updateIndexMatch[1], 10) : null;
-
     // Fuzzy matching can cause update0's selection to be used for update1
     const exactMatch = allSelectionEntries.find(([key, _val]) => {
       return key.toLowerCase() === artifactId.toLowerCase();
@@ -256,23 +182,6 @@ export function applyPartialUpdate(
 
     if (exactMatch) {
       cachedSelection = exactMatch[1];
-
-      const selectionUpdateIndex = (cachedSelection as any).updateIndex;
-      const selectionArtifactId = (cachedSelection as any).artifactId;
-      if (
-        updateIndex !== null &&
-        selectionUpdateIndex !== undefined &&
-        updateIndex !== selectionUpdateIndex
-      ) {
-        console.error('🚨🚨🚨 [CRITICAL BUG DETECTED] Using selection from WRONG update!', {
-          requestedUpdate: updateIndex,
-          selectionFromUpdate: selectionUpdateIndex,
-          requestedArtifactId: artifactId,
-          selectionArtifactId,
-          THIS_IS_THE_BUG: 'Selection cache returned coordinates from a different update',
-          RESULT: 'Updates will replace content at SAME SPOT instead of their intended location',
-        });
-      }
     } else if (updateIndex !== null) {
       // Strategy 1.6: If exact match failed but this is an update artifact,
       // try searching for selections with the same base identifier but different update indices
@@ -282,9 +191,6 @@ export function applyPartialUpdate(
         requestedUpdateIndex: updateIndex,
         allAvailableKeys: allSelectionEntries.map(([key]) => key),
       });
-
-      // Extract the base pattern (everything except the update index)
-      const _basePattern = artifactId.replace(/_update\d+_/, '_update{N}_');
 
       // Try update indices from 0 to 10 (should cover most cases)
       for (let tryIndex = 0; tryIndex <= 10; tryIndex++) {
@@ -343,17 +249,6 @@ export function applyPartialUpdate(
 
   // Strategy 2: Search allSelectionEntries for any match
   if (!cachedSelection && allSelectionEntries.length > 0) {
-    console.log('🔍 Strategy 2: Searching allSelectionEntries for match:', {
-      targetArtifactId: artifactId,
-      totalEntries: allSelectionEntries.length,
-      allFileKeys: allSelectionEntries.map(([key, details]) => ({
-        cacheKey: key,
-        fileKey: details.fileKey,
-        fileKeyLower: details.fileKey.toLowerCase(),
-        matches: details.fileKey.toLowerCase() === artifactId,
-      })),
-    });
-
     const selectionEntryValue = allSelectionEntries.find(
       ([key]) => key.replace(/\s+/g, '_').toLowerCase() === artifactId,
     );
@@ -383,10 +278,11 @@ export function applyPartialUpdate(
   }
 
   // Strategy 4: Try previous artifact as fallback
+  // For chained updates, each update MUST have its own selection context
   if (!cachedSelection && artifacts && !isUpdateArtifact) {
-    // console.log(
-    //   '🔍 [applyPartialUpdate] Strategy 4: Looking for previous artifact selection (NON-UPDATE artifacts only)',
-    // );
+    console.log(
+      '🔍 [applyPartialUpdate] Strategy 4: Looking for previous artifact selection (NON-UPDATE artifacts only)',
+    );
 
     const artifactArray = Object.values(artifacts);
 
@@ -394,15 +290,6 @@ export function applyPartialUpdate(
     const sortedArtifacts = artifactArray
       .filter((a) => a.id !== artifactId) // Exclude current artifact
       .sort((a, b) => a.lastUpdateTime - b.lastUpdateTime); // Oldest first
-
-    console.log('📋 [Strategy 4] Sorted artifacts (oldest to newest):', {
-      total: sortedArtifacts.length,
-      artifacts: sortedArtifacts.map((a) => ({
-        id: a.id,
-        time: a.lastUpdateTime,
-        isUpdate: a.isUpdate,
-      })),
-    });
 
     // Find the artifact that came just before the current one
     const currentArtifact = artifactArray.find((a) => a.id === artifactId);
@@ -558,7 +445,6 @@ export function applyPartialUpdate(
       const allOccurrences = originalContent.split(originalText).length - 1;
       if (allOccurrences > 1) {
         const allLines = originalContent.split('\n');
-
         // If originalText spans multiple lines, we need to search across line boundaries
         const isMultiLine = originalText.includes('\n');
         let lineLocations: Array<{
@@ -606,15 +492,11 @@ export function applyPartialUpdate(
             .filter((item) => item.contains);
         }
 
-
-        // CRITICAL FIX: Filter occurrences by HTML section (body, style, script)
         // This prevents matching HTML in <style> when it should be in <body>
         const bodyStart = originalContent.indexOf('<body>');
         const bodyEnd = originalContent.indexOf('</body>');
         const styleStart = originalContent.indexOf('<style>');
         const styleEnd = originalContent.indexOf('</style>');
-        const _scriptStart = originalContent.indexOf('<script>');
-        const _scriptEnd = originalContent.indexOf('</script>');
 
         // Determine which section the PROVIDED coordinates point to
         const targetInBody =
@@ -628,7 +510,6 @@ export function applyPartialUpdate(
           styleEnd !== -1 &&
           startLine >= allLines.slice(0, styleStart).join('\n').split('\n').length &&
           startLine <= allLines.slice(0, styleEnd).join('\n').split('\n').length;
-
 
         // Filter occurrences to ONLY those in the same section as target
         const filteredLocations = lineLocations.filter((loc) => {
@@ -661,8 +542,6 @@ export function applyPartialUpdate(
         const locationsForDisambiguation =
           filteredLocations.length > 0 ? filteredLocations : lineLocations;
 
-
-        // 🧠 ELEMENT-AWARE DISAMBIGUATION HELPER
         // Extract element type and context from a line
         const extractElementContext = (lineContent: string, lineIndex: number) => {
           // Extract element tag name (e.g., <button>, <input>, <div>)
@@ -709,20 +588,6 @@ export function applyPartialUpdate(
           startLine < allLines.length
             ? extractElementContext(allLines[startLine], startLine)
             : null;
-
-        console.log('🧠 [ELEMENT-AWARE DISAMBIGUATION] Analyzing element context:', {
-          targetLine: startLine,
-          targetElementType: targetLineContext?.elementType,
-          targetContextScore: targetLineContext?.contextScore,
-          allOccurrences: locationsWithContext.map((loc) => ({
-            line: loc.line,
-            elementType: loc.context.elementType,
-            contextScore: loc.context.contextScore,
-            hasId: loc.context.hasId,
-            hasOnClick: loc.context.hasOnClick,
-            linePreview: loc.context.lineContent.substring(0, 80),
-          })),
-        });
 
         // STRATEGY 1: Try exact line + column match (best case)
         const exactMatch = locationsForDisambiguation.find(
@@ -927,7 +792,6 @@ export function applyPartialUpdate(
           inScript = originalTextPosition >= scriptStart && originalTextPosition <= scriptEnd;
         }
 
-
         // Warn if originalText contains HTML but is in style/script section
         const containsHTML = /<[^>]+>/.test(originalText);
         const containsCSS = /:\s*[^;]+;/.test(originalText);
@@ -987,8 +851,6 @@ export function applyPartialUpdate(
         }
       }
 
-      // 🚨 STRICT MODE: If BOTH don't match, try fallback search BUT log it as LLM error
-      // In production, you might want to reject these updates entirely
       if (currentTextAtLocation !== cachedSelection.originalText) {
 
 
@@ -1005,9 +867,9 @@ export function applyPartialUpdate(
         const isOriginalTextMultiLine = cachedSelection.originalText.includes('\n');
 
         for (let searchLine = searchWindowStart; searchLine <= searchWindowEnd; searchLine++) {
-          // Try to find the originalText starting at this line
-          if (startLine === endLine) {
-            // Single-line search
+          // Use the CORRECT multi-line detection based on originalText content
+          if (!isOriginalTextMultiLine) {
+            // Single-line search: originalText has no newlines
             const line = lines[searchLine] || '';
             const columnIndex = line.indexOf(cachedSelection.originalText);
 
@@ -1022,22 +884,26 @@ export function applyPartialUpdate(
               break;
             }
           } else {
-            // Multi-line search - check if the text spans multiple lines starting here
-            const searchEndLine = Math.min(lines.length - 1, searchLine + (endLine - startLine));
-            const potentialMatch = lines.slice(searchLine, searchEndLine + 1).join('\n');
+            // Multi-line search: originalText contains newlines
+            // Search entire content as string (like we do in initial multi-line search)
+            // Start searching from current searchLine position
+            const searchStartPos =
+              lines.slice(0, searchLine).join('\n').length + (searchLine > 0 ? 1 : 0);
+            const contentFromHere = originalContent.substring(searchStartPos);
+            const matchIndex = contentFromHere.indexOf(cachedSelection.originalText);
 
-            if (potentialMatch.includes(cachedSelection.originalText)) {
-              // Found it! Now find exact position
-              const matchStart = potentialMatch.indexOf(cachedSelection.originalText);
+            if (matchIndex !== -1) {
+              // Found it! Calculate absolute position in full content
+              const absoluteMatchStart = searchStartPos + matchIndex;
 
-              // Calculate which line the match starts on
-              const beforeMatch = potentialMatch.substring(0, matchStart);
-              const newlinesBefore = (beforeMatch.match(/\n/g) || []).length;
-              const startLineOffset = newlinesBefore;
+              // Calculate which line this occurrence starts on
+              const textBeforeMatch = originalContent.substring(0, absoluteMatchStart);
+              const lineNumber = textBeforeMatch.split('\n').length - 1;
+              const lineStartIndex = textBeforeMatch.lastIndexOf('\n') + 1;
+              const columnIndex = absoluteMatchStart - lineStartIndex;
 
-              newStartLine = searchLine + startLineOffset;
-              newStartColumn = matchStart - beforeMatch.lastIndexOf('\n') - 1;
-              if (newStartColumn < 0) newStartColumn = matchStart; // First line case
+              newStartLine = lineNumber;
+              newStartColumn = columnIndex;
 
               // Calculate end position
               const textLines = cachedSelection.originalText.split('\n');
@@ -1073,7 +939,6 @@ export function applyPartialUpdate(
                     extractedPreview: extractedText.substring(0, 50),
                   },
                 );
-                // Continue searching - this was a false positive
               }
             }
           }
@@ -1114,10 +979,6 @@ export function applyPartialUpdate(
             const middleLines = correctedLines.slice(newStartLine + 1, newEndLine);
             currentTextAtLocation = [firstLinePart, ...middleLines, lastLinePart].join('\n');
           }
-
-          // console.log('✅ [VALIDATION] Verified corrected location matches:', {
-          //   matches: currentTextAtLocation === cachedSelection.originalText,
-          // });
         } else {
           // ±50 line search failed - try GLOBAL search across entire file
           console.warn('⚠️ [VALIDATION] Could not find originalText in ±50 line range', {
@@ -1213,7 +1074,6 @@ export function applyPartialUpdate(
           }
 
           if (globalFoundMatch) {
-
             // Update coordinates to the actual location
             cachedSelection = {
               ...cachedSelection,
@@ -1325,7 +1185,6 @@ export function applyPartialUpdate(
   const finalStartColumn = cachedSelection.startColumn;
   const finalEndColumn = cachedSelection.endColumn;
 
-
   if (finalStartLine === finalEndLine) {
     console.log('📍 [SINGLE-LINE PATH] Entering single-line merge logic');
 
@@ -1351,7 +1210,7 @@ export function applyPartialUpdate(
           foundAtColumn: columnIndex,
           willUse: `startColumn: ${columnIndex}, endColumn: ${columnIndex + searchText.length}`,
         });
- } else {
+      } else {
         // Text not on specified line - search nearby lines
         console.warn(
           '⚠️ [LINE NUMBER WRONG] Text not on specified line - searching entire file...',
@@ -1410,7 +1269,6 @@ export function applyPartialUpdate(
     let before = line.slice(0, useStartColumn);
     const after = line.slice(useEndColumn);
 
-    // 🛡️ CRITICAL COLUMN COORDINATE VALIDATION
     const selectedText = line.slice(useStartColumn, useEndColumn);
     const reconstructedLine = before + selectedText + after;
 
@@ -1443,18 +1301,6 @@ export function applyPartialUpdate(
       willBecome: before + updateContent + after,
     });
 
-    console.log(
-      'updateContent artifactutlis',
-      updateContent,
-      'before:',
-      before,
-      'after:',
-      after,
-      finalStartLine,
-      finalEndLine,
-    );
-
-    // CRITICAL: If updateContent has newlines but we're replacing a single line,
     // we need to handle it as a multi-line replacement
     // NOTE: updateLines is already declared at line 649, don't redeclare it here
     console.log('updateLinesLength', updateLines.length);
@@ -1571,7 +1417,6 @@ export function applyPartialUpdate(
         lastLine,
         ...lines.slice(finalStartLine + 1),
       ];
-      console.log('Result lines:', newLines);
 
       // 🔍 FINAL SAFETY CHECK: Verify we didn't create duplicate lines
       if (newLines[finalStartLine] && newLines[finalStartLine + 1]) {
@@ -1604,7 +1449,6 @@ export function applyPartialUpdate(
     }
 
     lines[useLine] = before + updateContent + after;
-    console.log('lines after single line update artifactutls', lines[useLine], updateContent);
     const result = lines.join('\n');
 
     // CRITICAL: Post-merge sanitization to fix common merge artifacts
@@ -1681,9 +1525,6 @@ export function applyPartialUpdate(
 
       return originalContent;
     }
-
-    console.log('✅ [MULTI-LINE COLUMN VALIDATION PASSED] Coordinates are correct');
-
     const selectedTextForDeletion =
       finalStartLine === finalEndLine
         ? lines[finalStartLine]?.slice(finalStartColumn, finalEndColumn) || ''
@@ -1724,15 +1565,14 @@ export function applyPartialUpdate(
         return originalContent;
       }
     }
-
     // If startColumn is 0 and endColumn is at end of line, don't add prefix/suffix
     const isFullLineSelection =
       finalStartColumn === 0 &&
       (finalAfterEnd.trim() === '' || correctedEndColumn === (lines[finalEndLine]?.length || 0));
 
-    // 🔍 REACT SAFETY CHECK FOR MULTI-LINE: Detect duplicate/nested code patterns
     // This happens when beforeStart is just indentation but the update includes the full line
     let effectiveBeforeStart = beforeStart;
+    let effectiveUpdateLines = [...updateLines];
     if (beforeStart.trim() === '' && updateLines.length > 0) {
       const firstUpdateLineTrimmed = updateLines[0].trim();
       const originalFirstLineTrimmed = lines[finalStartLine]?.trim() || '';
@@ -1747,83 +1587,67 @@ export function applyPartialUpdate(
           beforeStart: `"${beforeStart}" (indentation only)`,
           originalLine: `"${originalFirstLineTrimmed}"`,
           firstUpdateLine: `"${firstUpdateLineTrimmed}"`,
+          updateFirstLineRaw: `"${updateLines[0]}"`,
           problem: 'Update includes full line with indentation, but beforeStart adds more',
           FIXING: 'Clearing beforeStart to prevent duplication',
         });
         effectiveBeforeStart = '';
+        // Also remove leading whitespace from the first update line since it's already included
+        effectiveUpdateLines = [firstUpdateLineTrimmed, ...updateLines.slice(1)];
       }
     }
 
     let mergedUpdateLines: string[] = [];
 
     if (isFullLineSelection) {
-      // Full line selection - just use the update content as-is
-      //console.log('✅ Full line selection detected - using update content directly');
-      mergedUpdateLines = updateLines;
-    } else if (updateLines.length === 1) {
-      // Single update line replaces the whole region - add prefix and suffix
-      //console.log('✅ Single-line replacement in multi-line selection');
-      // CRITICAL FIX: Do NOT trim() - it removes important whitespace and corrupts content!
-      mergedUpdateLines = [effectiveBeforeStart + updateLines[0] + finalAfterEnd];
+      mergedUpdateLines = effectiveUpdateLines;
+    } else if (effectiveUpdateLines.length === 1) {
+      mergedUpdateLines = [effectiveBeforeStart + effectiveUpdateLines[0] + finalAfterEnd];
     } else {
-      // More than one line: first line gets prefix, last gets suffix, middle lines as-is
-      // CRITICAL: ALWAYS add prefix and suffix, even if they're whitespace
-      // Whitespace matters for indentation! Only skip if they're empty strings.
-      // CRITICAL FIX: Do NOT trim() - it removes important whitespace and corrupts content!
-      const firstLine = effectiveBeforeStart + updateLines[0];
-      const lastLine = updateLines[updateLines.length - 1] + finalAfterEnd;
+      const firstLine = effectiveBeforeStart + effectiveUpdateLines[0];
+      let effectiveAfterEnd = finalAfterEnd;
+      const lastUpdateLine = effectiveUpdateLines[effectiveUpdateLines.length - 1];
 
-      mergedUpdateLines = [firstLine, ...updateLines.slice(1, -1), lastLine];
+      if (finalAfterEnd.trim().length > 0 && finalAfterEnd.trim().length < 20) {
+        const afterEndTrimmed = finalAfterEnd.trim();
+        const lastUpdateLineTrimmed = lastUpdateLine.trim();
+        // Check if the last update line already ends with what's in afterEnd
+        if (lastUpdateLineTrimmed.endsWith(afterEndTrimmed)) {
+          console.error('🚨 END DUPLICATION DETECTED!', {
+            afterEnd: `"${finalAfterEnd}"`,
+            lastUpdateLine: `"${lastUpdateLine}"`,
+            problem: 'Last update line already includes afterEnd content',
+            FIXING: 'Clearing afterEnd to prevent duplication',
+            willRemove: afterEndTrimmed,
+          });
+          effectiveAfterEnd = finalAfterEnd.substring(
+            0,
+            finalAfterEnd.length - afterEndTrimmed.length,
+          );
+        }
+      }
 
+      const lastLine = lastUpdateLine + effectiveAfterEnd;
+
+      mergedUpdateLines = [firstLine, ...effectiveUpdateLines.slice(1, -1), lastLine];
+
+      console.log('✅ Multi-line merge complete:', {
+        updateLinesCount: effectiveUpdateLines.length,
+        beforeStart: `"${beforeStart}"`,
+        effectiveBeforeStart: `"${effectiveBeforeStart}"`,
+        afterEnd: `"${finalAfterEnd}"`,
+        originalAfterEnd: afterEnd !== finalAfterEnd ? `"${afterEnd}"` : '(same)',
+        wasAutoCorrected: afterEnd !== finalAfterEnd,
+        firstLine: `"${firstLine}"`,
+        middleLinesCount: effectiveUpdateLines.slice(1, -1).length,
+        lastLine: `"${lastLine}"`,
+        totalMergedLines: mergedUpdateLines.length,
+        mergedUpdateLinesPreview: mergedUpdateLines.slice(0, 3),
+      });
     }
 
-    // 🛡️ CRITICAL: Ensure proper line breaks between merged content and remaining lines
     // The join('\n') operation should add newlines between ALL array elements
     const finalMergedUpdateLines = [...mergedUpdateLines];
-
-    console.log('🔧 [LINE BREAK VERIFICATION]:', {
-      beforeCount: before.length,
-      mergedUpdateLinesCount: mergedUpdateLines.length,
-      afterCount: after.length,
-      lastBeforeLine: before.length > 0 ? `"${before[before.length - 1]}"` : '(empty)',
-      firstMergedLine: mergedUpdateLines.length > 0 ? `"${mergedUpdateLines[0]}"` : '(empty)',
-      lastMergedLine:
-        mergedUpdateLines.length > 0
-          ? `"${mergedUpdateLines[mergedUpdateLines.length - 1]}"`
-          : '(empty)',
-      firstAfterLine: after.length > 0 ? `"${after[0]}"` : '(empty)',
-      finalAfterEndValue: `"${finalAfterEnd}"`,
-    });
-
-    // Verify that join('\n') will add proper newlines
-    // Between arrays: [...before, ...merged, ...after] means:
-    // - before[last] + '\n' + merged[0]
-    // - merged[last] + '\n' + after[0]
-    if (mergedUpdateLines.length > 0 && after.length > 0) {
-      const lastMergedLine = mergedUpdateLines[mergedUpdateLines.length - 1];
-      const firstAfterLine = after[0];
-
-      if (lastMergedLine !== undefined && firstAfterLine !== undefined) {
-        console.log('✅ [LINE BREAK ASSURED]: join("\\n") will add newline between:', {
-          lastMergedLine: `"${lastMergedLine}"`,
-          firstAfterLine: `"${firstAfterLine}"`,
-          resultWillBe: `"${lastMergedLine}\\n${firstAfterLine}"`,
-        });
-      }
-    }
-
-    if (before.length > 0 && mergedUpdateLines.length > 0) {
-      const lastBeforeLine = before[before.length - 1];
-      const firstMergedLine = mergedUpdateLines[0];
-
-      if (lastBeforeLine !== undefined && firstMergedLine !== undefined) {
-        console.log('✅ [LINE BREAK ASSURED]: join("\\n") will add newline between:', {
-          lastBeforeLine: `"${lastBeforeLine}"`,
-          firstMergedLine: `"${firstMergedLine}"`,
-          resultWillBe: `"${lastBeforeLine}\\n${firstMergedLine}"`,
-        });
-      }
-    }
 
     const mergedContent = [...before, ...finalMergedUpdateLines, ...after].join('\n');
 
@@ -1864,7 +1688,6 @@ export function applyPartialUpdate(
         return originalContent; // Refuse to apply - return original unchanged
       }
     }
-
     return mergedContent;
   }
 }
@@ -1909,17 +1732,6 @@ export function applyAllPartialUpdates(
 
   const targetArtifact = targetArtifactId ? artifacts[targetArtifactId] : null;
   const targetTime = targetArtifact?.lastUpdateTime || Infinity;
-
-  console.log('🎯 [applyAllPartialUpdates] Target artifact info:', {
-    targetArtifactId,
-    targetArtifactFound: !!targetArtifact,
-    targetIdentifier: targetArtifact?.identifier,
-    targetIsUpdate: targetArtifact?.isUpdate,
-    targetTime,
-    targetContentLength: targetArtifact?.content?.length || 0,
-  });
-
-  // CRITICAL: Check if originalContent is already duplicated (from cache)
   // If so, find the BASE artifact (non-update) and use its content instead
   const contentHasDuplication = (content: string): boolean => {
     const doctypeMatches = (content.match(/<!DOCTYPE/gi) || []).length;
@@ -2006,9 +1818,6 @@ export function applyAllPartialUpdates(
       return indexA - indexB; // ASCENDING: lower index first
     });
 
-  console.log('updateArtifacts', updateArtifacts);
-
-  // CRITICAL: If no update artifacts were found, return the original content
   if (updateArtifacts.length === 0) {
     console.warn('⚠️ [applyAllPartialUpdates] NO UPDATE ARTIFACTS FOUND!', {
       originalContentLength: mergedContent.length,
@@ -2026,36 +1835,6 @@ export function applyAllPartialUpdates(
   }
 
   let count = 0;
-  console.log('🔄 [applyAllPartialUpdates] Starting sequential update application:', {
-    totalUpdates: updateArtifacts.length,
-    updateOrder: updateArtifacts.map(
-      (u, i) => `${i}: ${u.id} (index=${u.index}, time=${u.lastUpdateTime})`,
-    ),
-  });
-
-  // DEBUGGING: Dump ALL selection contexts from cache
-  console.log('🔍🔍🔍 [applyAllPartialUpdates] SELECTION CACHE DUMP:');
-  console.log('═'.repeat(80));
-  const _allSelections = Array.from(artifactCache._selectionCache.entries());
-  updateArtifacts.forEach((update, idx) => {
-    const selection = artifactCache.getSelection(update.id);
-    console.log(`\n📍 Update ${idx} (${update.id}):`);
-    console.log(`   Has Selection: ${!!selection}`);
-    if (selection) {
-      console.log(`   Start Line: ${selection.startLine}`);
-      console.log(`   End Line: ${selection.endLine}`);
-      console.log(`   Start Column: ${selection.startColumn}`);
-      console.log(`   End Column: ${selection.endColumn}`);
-      console.log(`   Original Text: "${selection.originalText?.substring(0, 100)}..."`);
-      console.log(`   Updated Text: "${selection.updatedText?.substring(0, 100)}..."`);
-    } else {
-      console.log(`   ⚠️ NO SELECTION CONTEXT - THIS UPDATE WILL FAIL!`);
-    }
-  });
-  console.log('═'.repeat(80));
-
-  // But EACH UPDATE MUST BUILD ON THE PREVIOUS MERGED RESULT!
-  // Selection coordinates are stored per-update, not relative to base
   const baseContent = mergedContent; // Store the original base content for logging
 
   for (const updateArtifact of updateArtifacts) {
@@ -2096,12 +1875,6 @@ export function applyAllPartialUpdates(
     count++;
   }
 
-  // Final save: only persist merged content for UPDATE artifact (not base) to avoid overwriting original.
-  console.log(
-    '🎯 [applyAllPartialUpdates] Final merged content length:',
-    mergedContent,
-    targetArtifactId,
-  );
   if (targetArtifactId && mergedContent !== originalContent) {
     const targetArtifact = artifacts[targetArtifactId];
     console.log('target Artifact before saving to cache:', targetArtifact);
@@ -2225,50 +1998,5 @@ function logContentChanges(originalContent: string, mergedContent: string, artif
       console.warn('⚠️ Too many changes detected, stopping diff');
       break;
     }
-  }
-
-  console.log('🔍 [CHANGE DETECTION] Summary:', {
-    artifact: artifactTitle,
-    originalLineCount: originalLines.length,
-    mergedLineCount: mergedLines.length,
-    lineDifference: mergedLines.length - originalLines.length,
-    totalChanges: changes.length,
-    added: changes.filter((c) => c.type === 'added').length,
-    removed: changes.filter((c) => c.type === 'removed').length,
-    modified: changes.filter((c) => c.type === 'modified').length,
-  });
-
-  if (changes.length > 0 && changes.length <= 20) {
-    console.log(
-      '📝 [DETAILED CHANGES]:',
-      changes
-        .map((c) => {
-          if (c.type === 'added') {
-            return `  Line ${c.lineNum}: + "${c.new}"`;
-          } else if (c.type === 'removed') {
-            return `  Line ${c.lineNum}: - "${c.original}"`;
-          } else {
-            return `  Line ${c.lineNum}: ≠ "${c.original}" → "${c.new}"`;
-          }
-        })
-        .join('\n'),
-    );
-  } else if (changes.length > 20) {
-    console.log(
-      '📝 [FIRST 10 CHANGES]:',
-      changes
-        .slice(0, 10)
-        .map((c) => {
-          if (c.type === 'added') {
-            return `  Line ${c.lineNum}: + "${c.new?.substring(0, 80)}"`;
-          } else if (c.type === 'removed') {
-            return `  Line ${c.lineNum}: - "${c.original?.substring(0, 80)}"`;
-          } else {
-            return `  Line ${c.lineNum}: ≠ "${c.original?.substring(0, 40)}" → "${c.new?.substring(0, 40)}"`;
-          }
-        })
-        .join('\n'),
-    );
-    console.log(`  ... and ${changes.length - 10} more changes`);
   }
 }
