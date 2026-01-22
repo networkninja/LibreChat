@@ -1,4 +1,4 @@
-import { artifactCache } from '~/components/Artifacts/ArtifactCache';
+import { artifactCache } from '~/components/Artifacts/artifactCache';
 
 // --- Post-merge sanitizer: fixes common merge artifacts like malformed attributes ---
 function _sanitizeMergeResult(content: string): string {
