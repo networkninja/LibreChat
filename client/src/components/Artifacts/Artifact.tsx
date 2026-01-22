@@ -1499,10 +1499,13 @@ function SelectionComponent({
     // endColumn defaults to 0 (will be adjusted to end of line in applyPartialUpdate)
     const startColumn = startColumnMatch ? parseInt(startColumnMatch[1], 10) : 0;
     const endColumn = endColumnMatch ? parseInt(endColumnMatch[1], 10) : 0;
+    const startLine = parseInt(startLineMatch[1], 10) - 1;
+    const endLine = parseInt(endLineMatch[1], 10) - 1;
+
     const selectionContext = {
       originalText: originalTextMatch ? originalTextMatch[1] : '',
-      startLine: parseInt(startLineMatch[1], 10),
-      endLine: parseInt(endLineMatch[1], 10),
+      startLine,
+      endLine,
       startColumn, // Use the variable with default value (already computed above)
       endColumn, // Use the variable with default value (already computed above)
       artifactMessageId: messageId,

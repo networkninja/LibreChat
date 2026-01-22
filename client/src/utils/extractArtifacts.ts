@@ -26,6 +26,10 @@ function cleanArtifactContent(content: string): string {
     cleaned = cleaned.slice(1, -1);
   }
 
+  // Remove trailing colons that are remnants of incomplete ::: delimiters during streaming
+  // This handles cases where "::" or ":" remains at the end during partial streaming
+  cleaned = cleaned.replace(/:\s*$/, '');
+
   return cleaned.trim();
 }
 
@@ -35,7 +39,8 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
     return [];
   }
   // Regex to match both :::artifact and :::artifactupdate blocks
-  const blockRegex = /:::(artifact(?:update)?)\s*\{([^}]*)\}:::\s*([\s\S]*?)\s*:::/g;
+  // Format: :::artifact{...}\n content \n:::
+  const blockRegex = /:::(artifact(?:update)?)\s*\{([^}]*)\}\s*\n([\s\S]*?)\n:::/g;
 
   const artifactMap = new Map<string, any>(); // Use Map to track by identifier
   let match;
@@ -93,8 +98,9 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
           title: attributes.title,
           type: attributes.type,
           content: cleanedContent,
+          snippetContent: cleanedContent,
           messageId,
-          index: matchCount, 
+          index: matchCount,
           lastUpdateTime: Date.now(),
           isUpdate: true,
           ...attributes,
@@ -116,6 +122,7 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
         const updatedArtifact = {
           ...existingUpdate,
           content: cleanedContent,
+          snippetContent: cleanedContent,
           lastUpdateTime: timestamp,
         };
 
