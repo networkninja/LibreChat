@@ -41,11 +41,8 @@ export default function ArtifactTabs({
   const { latestMessage: _latestMessage } = useChatContext();
   const [_artifacts, _setArtifacts] = useRecoilState(artifactsState);
   const [_cacheHydrated, _setCacheHydrated] = useState(false);
-  const [isInitialLoad, setIsInitialLoad] = useState(true); // Track if this is initial load/refresh
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  // CRITICAL: For BASE artifacts, use the prop directly (preserves original content)
-  // For UPDATE artifacts, use state (may have merged content)
-  // This ensures base artifacts are never modified by merge operations
   const finalArtifact = artifact.isUpdate
     ? (_artifacts?.[artifact.id] ?? artifact) // Update artifacts: prefer state
     : artifact; // Base artifacts: always use prop (pristine original)
@@ -61,8 +58,6 @@ export default function ArtifactTabs({
   // Check if message is streaming (compute early to use in useMemo)
   // A message is streaming ONLY if explicitly marked as unfinished
   const isMessageStreaming = _latestMessage?.unfinished === true;
-
-  // CRITICAL: Track streaming state to force re-merge when streaming completes
   const lastIsSubmittingRef = useRef<boolean>(false);
   const [streamingCompleteTrigger, setStreamingCompleteTrigger] = useState(0);
 
@@ -82,12 +77,10 @@ export default function ArtifactTabs({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSubmitting]);
 
-  // IMPORTANT: On refresh, reconstruct artifact by applying all updates to the base
   const lastComputedIdRef = useRef<string | null>(null);
   const lastMergedResultRef = useRef<Artifact | null>(null);
   
   const mergedArtifact = React.useMemo(() => {
-
     if (isMessageStreaming || isSubmitting) {
       // Return raw artifact content during streaming - no merge, no cache
       return finalArtifact;
@@ -101,11 +94,8 @@ export default function ArtifactTabs({
     //if (!latestMessage?.content || !latestMessage.messageId) return;
     // If this is an update artifact, we need to merge all updates up to this point
     if (finalArtifact.isUpdate) {
-      console.log('🔄 [mergedArtifact] This is an UPDATE artifact, need to merge');
+      // Don't split it - just use it directly (splitting would break identifiers with underscores)
       const baseIdentifier = finalArtifact.identifier;
-
-      // CRITICAL FIX: Find the MOST RECENT artifact (could be previous update or base)
-      // This allows incremental merging instead of always going back to original base
       const currentUpdateIndex =
         finalArtifact.index ?? parseInt(finalArtifact.id?.match(/_update(\d+)_/)?.[1] || '0', 10);
 
@@ -119,8 +109,6 @@ export default function ArtifactTabs({
               return _indexB - _indexA; // Descending: newest first
             })
         : [];
-      // Find the most recent artifact BEFORE this one (highest index less than current)
-      // This could be update(N-1) or the base artifact
       const previousArtifact = relatedArtifacts.find((a) => {
         //if (!a?.isUpdate) return true; // Base artifact is always a candidate
         const artifactIndex = a?.index ?? parseInt(a?.id?.match(/_update(\d+)_/)?.[1] || '0', 10);
@@ -129,45 +117,18 @@ export default function ArtifactTabs({
 
       // Fallback: if no previous update found, use base artifact
       const originalArtifact = previousArtifact || relatedArtifacts.find((a) => a && !a.isUpdate);
-
-      console.log('🔍 [mergedArtifact] Previous artifact search:', {
-        baseIdentifier,
-        originalArtifactFound: !!originalArtifact,
-        originalArtifactId: originalArtifact?.id,
-        originalArtifactContentLength: originalArtifact?.content?.length,
-        allArtifactsCount: Object.keys(_artifacts).length,
-        allArtifactIds: Object.keys(_artifacts),
-      });
-
-      // CRITICAL: ALWAYS merge if we have a base artifact, don't check if content differs
       // On refresh, artifact.content might be empty/partial, so we need to merge regardless
       if (originalArtifact && originalArtifact.content) {
         // Strategy 1: Check cache for previous artifact (already has merged content)
         // Strategy 2: If no cache, use originalArtifact.content (could be previous update or base)
         let baseContentForMerge = originalArtifact.content ?? '';
-
-        // If the previous artifact is an UPDATE artifact, check if it has cached merged content
         if (previousArtifact?.isUpdate) {
           const cachedPrevious = artifactCache.getContent(previousArtifact.id);
           if (cachedPrevious && cachedPrevious.content && cachedPrevious.content.trim() !== '') {
-            console.log('✅ Using cached merged content from previous update:', {
-              previousArtifactId: previousArtifact.id,
-              cachedContentLength: cachedPrevious.content.length,
-              BENEFIT: 'Incremental merge - building on previous merged result',
-            });
             baseContentForMerge = cachedPrevious.content;
           } else {
-            console.log('⚠️ Previous update has no cached content - using raw content:', {
-              previousArtifactId: previousArtifact.id,
-              willNeedFullMerge: true,
-            });
-            // Fallback: use raw content from previous artifact
             baseContentForMerge = previousArtifact.content ?? originalArtifact.content ?? '';
           }
-        } else {
-          console.log('ℹ️ Previous artifact is BASE - using its content directly:', {
-            baseArtifactId: originalArtifact.id,
-          });
         }
 
         // Now apply THIS update to the base content (which could be cached previous merged result)
@@ -185,8 +146,6 @@ export default function ArtifactTabs({
         };
         lastComputedIdRef.current = finalArtifact.id;
         lastMergedResultRef.current = result;
-
-        // CRITICAL: Set isInitialLoad to false after first successful merge
         // This ensures subsequent updates use the faster applyPartialUpdate instead of applyAllPartialUpdates
         if (isInitialLoad) {
           console.log('🔄 [ArtifactTabs] First merge complete - setting isInitialLoad to false');
@@ -200,9 +159,6 @@ export default function ArtifactTabs({
     } else {
       console.log('ℹ️ [mergedArtifact] This is a BASE artifact, returning as-is');
     }
-
-    // If it's not an update or we couldn't find the base, return as-is
-    console.log('⏭️ [mergedArtifact] Returning finalArtifact as-is');
     return finalArtifact;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -241,68 +197,41 @@ export default function ArtifactTabs({
     wasMergedRef.current =
       mergedArtifact?.id === lastComputedIdRef.current &&
       mergedArtifact?.isUpdate === true &&
-      mergedArtifact?.content !== stateArtifact?.content;
-  }, [mergedArtifact, stateArtifact]);
+      mergedArtifact?.content !== finalArtifact?.content;
+  }, [mergedArtifact, finalArtifact]);
 
   useEffect(() => {
     if (!mergedArtifact || !mergedArtifact.content || !mergedArtifact.id) {
       return;
     }
-
-    // Guard 1: Don't save during streaming (Artifact.tsx handles that)
     if (isMessageStreaming) {
-      console.log('⏭️ [ArtifactTabs] Skipping cache save during streaming');
       return;
     }
 
-    // Guard 2: Only save FULL DOCUMENTS (not snippets)
     if (!isFullDoc(mergedArtifact.content)) {
-      //console.log('⏭️ [ArtifactTabs] Skipping cache save for snippet content');
       return;
     }
 
-    // Guard 3: Only save if we actually performed a merge (not just viewing)
     if (!wasMergedRef.current) {
-      //console.log('⏭️ [ArtifactTabs] Skipping cache save - no merge was performed');
       return;
     }
-
-    // Guard 3.5: NEVER save to BASE artifacts - only UPDATE artifacts should be saved
-    // Base artifacts should preserve their original content
     if (!mergedArtifact.isUpdate) {
-      // /console.log('⏭️ [ArtifactTabs] Skipping cache save - BASE artifacts should not be modified', {
-      //   artifactId: mergedArtifact.id,
-      //   isUpdate: mergedArtifact.isUpdate,
-      // });
       return;
     }
 
-    // Guard 4: Only save if content is different from cached
     const cachedContent = artifactCache.getContent(mergedArtifact.id);
     if (cachedContent?.content === mergedArtifact.content) {
-      //console.log('⏭️ [ArtifactTabs] Skipping cache save - content already cached');
-      return; // Already cached, no need to save
+      return;
     }
 
-    // Guard 5: Prevent duplicate saves within 2 seconds (debounce)
     const lastSaveTime = lastSaveTimestampRef.current.get(mergedArtifact.id) || 0;
     const timeSinceLastSave = Date.now() - lastSaveTime;
     if (timeSinceLastSave < 2000) {
-      //console.log('⏭️ [ArtifactTabs] Skipping cache save - saved recently:', {
-      //  artifactId: mergedArtifact.id,
-      //  timeSinceLastSave,
-      //});
       return;
     }
-    // Update timestamp tracker
+
     lastSaveTimestampRef.current.set(mergedArtifact.id, Date.now());
-
     artifactCache.setContent(mergedArtifact.id, mergedArtifact.content);
-
-    // console.log('✅ [ArtifactTabs] Saved merged content to UPDATE artifact only:', {
-    //   updateArtifactId: mergedArtifact.id,
-    //   preservedBaseArtifact: true,
-    // });
   }, [mergedArtifact, _artifacts, isMessageStreaming]);
 
   const lastIdRef = useRef<string | null>(null);
@@ -311,18 +240,14 @@ export default function ArtifactTabs({
   const initializeCache = useCallback(
     async (artifactId: string) => {
       if (artifactId && !cacheInitialized) {
-        console.log('🔄 [ArtifactTabs] Initializing cache for artifact:', artifactId);
-
         try {
           // Load artifact-specific cache from database
           await artifactCache.initWithDatabase(artifactId);
           await artifactCache._loadFromDatabase(artifactId);
           setCacheInitialized(true);
-
-          console.log('✅ [ArtifactTabs] Cache initialized successfully for:', artifactId);
         } catch (error) {
           console.error('❌ [ArtifactTabs] Failed to initialize cache:', error);
-          setCacheInitialized(true); // Still mark as initialized to prevent retries
+          setCacheInitialized(true);
         }
       }
     },
@@ -334,13 +259,11 @@ export default function ArtifactTabs({
       setCurrentCode(undefined);
       initializeCache(artifact.id);
     }
-    console.log('artifact.id', artifact.id, 'lastIdRef.current', lastIdRef.current);
     lastIdRef.current = artifact.id;
   }, [setCurrentCode, artifact.id, initializeCache]);
 
   useEffect(() => {
     async function hydrateCache() {
-      console.log('hydrate cache called', artifact?.id);
       if (artifact?.id) {
         await ensureArtifactCacheHydrated(artifact.id);
         // Now you can safely use artifactCache.getSelection, getContent, etc.
@@ -366,19 +289,11 @@ export default function ArtifactTabs({
   // Update currentCode when artifact content changes DO NOT TOUCH OTHERWISE IT BREAKS UPDATES
   useEffect(() => {
     if (currentCode === undefined) {
-      const updateArtifact = artifact; // could be an update
-
-      // CRITICAL FIX: Only process UPDATE artifacts through merge logic
-      // Base artifacts should use their content directly without merge processing
+      const updateArtifact = artifact;
       if (!updateArtifact.isUpdate) {
-        console.log('ℹ️ [ArtifactTabs] Base artifact - using content directly without merge');
         setCurrentCode(updateArtifact.content);
         return;
       }
-
-      // Only continue with merge logic for UPDATE artifacts
-      // CRITICAL: Update artifacts already have the SAME identifier as their base
-      // Don't split it - just use it directly (splitting would break identifiers with underscores)
       const baseIdentifier = updateArtifact.identifier;
       let originalArtifact: typeof artifact | undefined = undefined;
       if (baseIdentifier && _artifacts && typeof _artifacts === 'object') {
@@ -386,10 +301,6 @@ export default function ArtifactTabs({
           (a) => a && a.identifier === baseIdentifier && !a.isUpdate,
         );
       }
-      console.log('[ArtifactTabs] useEffect: artifact.content:', artifact.content);
-      console.log('[ArtifactTabs] useEffect: currentCode:', currentCode);
-      console.log('[ArtifactTabs] useEffect: baseIdentifier:', baseIdentifier);
-      console.log('[ArtifactTabs] useEffect: originalArtifact:', originalArtifact);
       if (originalArtifact && originalArtifact.content) {
 
         const mergedContent = applyAllPartialUpdates(
@@ -399,7 +310,6 @@ export default function ArtifactTabs({
           false, // not streaming
           null, // conversationId not needed for display-only tabs
         );
-        console.log('mergedContent in useEffect', mergedContent);
         setCurrentCode(mergedContent);
       } else {
         setCurrentCode(artifact.content);
@@ -418,15 +328,11 @@ export default function ArtifactTabs({
   }, [mergedArtifact, setCurrentCode, currentCode]);
 
   const { submitMessage } = useSubmitMessage();
-
   const displayArtifact = isMessageStreaming
     ? artifact
     : artifactCache.getDisplayArtifact(artifact.id, _artifacts || undefined) || artifact;
 
-  const snippetContent = (artifact as any).snippetContent;
-
   let content: string;
-  let contentSource: string;
 
   if (artifact.isUpdate) {
     // User clicked on an UPDATE artifact button - show CUMULATIVE merged content (base + all updates up to this point)
