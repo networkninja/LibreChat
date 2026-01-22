@@ -14,8 +14,6 @@ function _sanitizeMergeResult(content: string): string {
     });
   }
 
-  // CRITICAL FIX: Detect and fix malformed style attributes
-  // Pattern: style="value1">"value2">
   const malformedStylePattern = /(style\s*=\s*"[^"]*")>"[^"]*">/g;
   if (malformedStylePattern.test(fixed)) {
     console.warn('🧹 [SANITIZE] Detected malformed style - fixing...');
@@ -25,8 +23,6 @@ function _sanitizeMergeResult(content: string): string {
     });
   }
 
-  // CRITICAL FIX: Detect and fix malformed id/data attributes
-  // Pattern: id="value1">"value2"> or data-*="value1">"value2">
   const malformedIdPattern = /((id|data-[a-z-]+)\s*=\s*"[^"]*")>"[^"]*">/g;
   if (malformedIdPattern.test(fixed)) {
     console.warn('🧹 [SANITIZE] Detected malformed id/data attribute - fixing...');
@@ -60,7 +56,6 @@ export function applyPartialUpdate(
   const isFullDoc = (c: string) => /<!DOCTYPE|<html|<head>|<body>/i.test(c);
   const isSnippet = (c: string) => !isFullDoc(c) && /<p[ >]/i.test(c);
 
-  // CRITICAL: Extract base identifier EARLY so it's available for snippet logic
   artifactId = artifactId.toLowerCase();
   const baseIdentifier = artifactId.split('_update')[0];
   const isUpdateArtifact = artifactId.includes('_update');
@@ -343,14 +338,106 @@ export function applyPartialUpdate(
   }
 
   // --- Precise merging using line and column ---
-  const startLine = cachedSelection.startLine;
-  const endLine = cachedSelection.endLine;
-  const startColumn = cachedSelection.startColumn;
-  const endColumn = cachedSelection.endColumn;
+  let startLine = cachedSelection.startLine;
+  let endLine = cachedSelection.endLine;
+  let startColumn = cachedSelection.startColumn;
+  let endColumn = cachedSelection.endColumn;
   const lines = originalContent.split('\n');
   if (typeof updateContent === 'undefined') return originalContent;
-
   const updateLines = updateContent.split('\n');
+
+  if (startLine !== endLine && startColumn === 0 && endColumn === 0) {
+    console.warn('⚠️ [COORDINATE FIX] Multi-line selection with both columns = 0 detected!', {
+      startLine,
+      endLine,
+      originalCoordinates: { startColumn: 0, endColumn: 0 },
+      interpretation: 'Select entire lines from startLine to endLine (inclusive)',
+      FIXING: 'Setting endColumn to end of last line',
+    });
+
+    // Set endColumn to the end of the last line (or 0 if empty line)
+    endColumn = lines[endLine]?.length || 0;
+
+    console.log('✅ [COORDINATE FIX] Corrected endColumn:', {
+      newEndColumn: endColumn,
+      lastLineContent: lines[endLine],
+      lastLineLength: lines[endLine]?.length,
+    });
+
+    // Update the cached selection so downstream logic uses corrected values
+    cachedSelection = {
+      ...cachedSelection,
+      endColumn: endColumn,
+    };
+  }
+
+  console.log('📍 [MERGE LOCATION] Starting precise merge:', {
+    startLine,
+    endLine,
+    startColumn,
+    endColumn,
+    totalLinesInOriginal: lines.length,
+    linesBeingReplaced: endLine - startLine + 1,
+    coordinatesWereCorrected:
+      cachedSelection.startColumn === 0 && cachedSelection.endColumn !== endColumn,
+    fileLines_atCoordinates: lines
+      .slice(startLine, endLine + 1)
+      .map((l, i) => `[${startLine + i}]: ${l}`),
+  });
+
+  if (cachedSelection?.originalText && startLine > 0) {
+    // Try extracting with coordinates shifted by -1 (1-indexed → 0-indexed conversion)
+    let testExtraction = '';
+    const testStartLine = startLine - 1;
+    const testEndLine = endLine - 1;
+
+    if (testStartLine === testEndLine) {
+      testExtraction = lines[testStartLine]?.slice(startColumn, endColumn) || '';
+    } else if (testStartLine >= 0 && testEndLine < lines.length) {
+      const firstPart = lines[testStartLine]?.slice(startColumn) || '';
+      const lastPart = lines[testEndLine]?.slice(0, endColumn) || '';
+      const middleParts = lines.slice(testStartLine + 1, testEndLine);
+      testExtraction = [firstPart, ...middleParts, lastPart].join('\n');
+    }
+
+    // Normalize for comparison
+    const normalizeForTest = (text: string) =>
+      text
+        .split('\n')
+        .map((line) => line.trimEnd())
+        .join('\n');
+
+    if (
+      testExtraction &&
+      normalizeForTest(testExtraction) === normalizeForTest(cachedSelection.originalText)
+    ) {
+      console.warn(
+        '🚨 [INDEXING BUG DETECTED] Coordinates appear to be 1-indexed instead of 0-indexed!',
+        {
+          providedCoordinates: { startLine, endLine },
+          shouldBe: { startLine: testStartLine, endLine: testEndLine },
+          extractedAtProvided: lines
+            .slice(startLine, endLine + 1)
+            .map((l, i) => `[${startLine + i}]: ${l}`),
+          extractedAtCorrected: lines
+            .slice(testStartLine, testEndLine + 1)
+            .map((l, i) => `[${testStartLine + i}]: ${l}`),
+          FIXING: 'Adjusting coordinates by -1',
+        },
+      );
+
+      // Apply the correction
+      startLine = testStartLine;
+      endLine = testEndLine;
+
+      // Update cached selection
+      cachedSelection = {
+        ...cachedSelection,
+        startLine: testStartLine,
+        endLine: testEndLine,
+      };
+    }
+  }
 
   // Before applying update, check if updateContent already exists in originalContent
   // This prevents double text from appearing when coordinates are wrong
@@ -540,28 +627,15 @@ export function applyPartialUpdate(
         const middleLines = lines.slice(startLine + 1, endLine);
         currentTextAtLocation = [firstLinePart, ...middleLines, lastLinePart].join('\n');
       }
+      const normalizeForComparison = (text: string) => {
+        return text
+          .split('\n')
+          .map((line) => line.trimEnd())
+          .join('\n');
+      };
 
-      console.log('🔍 [STRICT VALIDATION] Checking BOTH line numbers AND text content:', {
-        step1_lineNumbers: {
-          providedStartLine: startLine,
-          providedEndLine: endLine,
-          lineNumbersValid: startLine >= 0 && endLine < lines.length,
-          actualContentAtLines: currentTextAtLocation.substring(0, 200),
-        },
-        step2_textMatch: {
-          expectedText: cachedSelection.originalText.substring(0, 200),
-          actualText: currentTextAtLocation.substring(0, 200),
-          textMatches: currentTextAtLocation === cachedSelection.originalText,
-        },
-        step3_bothRequired: {
-          lineNumbersValid: startLine >= 0 && endLine < lines.length,
-          textMatches: currentTextAtLocation === cachedSelection.originalText,
-          BOTH_VALID:
-            startLine >= 0 &&
-            endLine < lines.length &&
-            currentTextAtLocation === cachedSelection.originalText,
-        },
-      });
+      const normalizedCachedText = normalizeForComparison(cachedSelection.originalText);
+      const normalizedCurrentText = normalizeForComparison(currentTextAtLocation);
 
       // This is a STRICT validation - we do NOT use fallback search anymore
       // If the LLM provides wrong text, we want to know about it (validation error)
@@ -666,7 +740,51 @@ export function applyPartialUpdate(
             const searchStartPos =
               lines.slice(0, searchLine).join('\n').length + (searchLine > 0 ? 1 : 0);
             const contentFromHere = originalContent.substring(searchStartPos);
-            const matchIndex = contentFromHere.indexOf(cachedSelection.originalText);
+            
+            // Try exact match first
+            let matchIndex = contentFromHere.indexOf(cachedSelection.originalText);
+
+            // If exact match fails, try fuzzy whitespace-normalized match
+            if (matchIndex === -1) {
+              const normalizedOriginalLines = cachedSelection.originalText
+                .split('\n')
+                .map((line) => line.trimEnd());
+              const originalLineCount = normalizedOriginalLines.length;
+
+              // Try to find a sequence of lines that match (ignoring trailing whitespace)
+              for (let offset = 0; offset < contentFromHere.length; offset++) {
+                const candidateStartLine = searchLine + originalContent.substring(searchStartPos, searchStartPos + offset).split('\n').length - 1;
+                
+                if (candidateStartLine + originalLineCount > lines.length) {
+                  break;
+                }
+
+                const candidateLines = lines
+                  .slice(candidateStartLine, candidateStartLine + originalLineCount)
+                  .map((line) => line.trimEnd());
+
+                // Compare line by line
+                let allLinesMatch = true;
+                for (let i = 0; i < originalLineCount; i++) {
+                  if (candidateLines[i] !== normalizedOriginalLines[i]) {
+                    allLinesMatch = false;
+                    break;
+                  }
+                }
+
+                if (allLinesMatch) {
+                  console.log('✅ [FUZZY MULTI-LINE MATCH] Found using normalized whitespace!', {
+                    searchLine: candidateStartLine,
+                    lineCount: originalLineCount,
+                  });
+                  
+                  // Calculate the exact character position
+                  matchIndex = lines.slice(0, candidateStartLine).join('\n').length + 
+                              (candidateStartLine > 0 ? 1 : 0) - searchStartPos;
+                  break;
+                }
+              }
+            }
 
             if (matchIndex !== -1) {
               const absoluteMatchStart = searchStartPos + matchIndex;
@@ -728,16 +846,16 @@ export function applyPartialUpdate(
         } else {
           console.error('❌ [FUZZY MATCH FAILED] Could not find originalText within ±100 lines', {
             searchedLines: `${searchWindowStart} to ${searchWindowEnd}`,
-            originalText: cachedSelection.originalText.substring(0, 100),
-            decision: 'Using original coordinates as fallback',
+            originalText: cachedSelection.originalText.substring(0, 200),
+            originalTextLength: cachedSelection.originalText.length,
+            isMultiLine: cachedSelection.originalText.includes('\n'),
+            lineCount: cachedSelection.originalText.split('\n').length,
+            firstLine: cachedSelection.originalText.split('\n')[0],
+            lastLine: cachedSelection.originalText.split('\n')[cachedSelection.originalText.split('\n').length - 1],
+            fileContent_firstFewLines: lines.slice(0, 10).map((l, i) => `[${i}]: ${l}`),
+            decision: 'Using original coordinates as fallback - THIS MAY CAUSE WRONG CONTENT TO BE REPLACED',
           });
         }
-      } else if (skipValidation) {
-        // In sequential mode, we found originalText and it matches
-        console.log('✅ [VALIDATION PASSED - SEQUENTIAL MODE] Original text found and located');
-      } else {
-        // Non-sequential mode and text matches exactly
-        console.log('✅ [VALIDATION PASSED] Original text matches - safe to apply update');
       }
     } // END: LLM validation block (cachedSelection.source !== 'user')
   } else {
@@ -745,16 +863,14 @@ export function applyPartialUpdate(
   }
 
   // Re-extract line/column numbers (may have been corrected above)
-  const finalStartLine = cachedSelection.startLine;
-  const finalEndLine = cachedSelection.endLine;
-  const finalStartColumn = cachedSelection.startColumn;
-  const finalEndColumn = cachedSelection.endColumn;
+  let finalStartLine = cachedSelection.startLine;
+  let finalEndLine = cachedSelection.endLine;
+  let finalStartColumn = cachedSelection.startColumn;
+  let finalEndColumn = cachedSelection.endColumn;
 
   if (finalStartLine === finalEndLine) {
     console.log('📍 [SINGLE-LINE PATH] Entering single-line merge logic');
 
-    // 🚨 CRITICAL: Check for invalid column coordinates (both 0)
-    // This usually means the LLM didn't provide proper coordinates
     if (finalStartColumn === 0 && finalEndColumn === 0 && cachedSelection?.originalText) {
       console.error('❌ [INVALID COORDINATES] Both startColumn and endColumn are 0!', {
         lineNumber: finalStartLine,
@@ -816,10 +932,19 @@ export function applyPartialUpdate(
         startColumn: columnIndex,
         endColumn: columnIndex + searchText.length,
       };
-    }
 
-    // Single-line selection: replace only the substring
-    // Use corrected line number if coordinates were fixed
+      finalStartLine = cachedSelection.startLine;
+      finalEndLine = cachedSelection.endLine;
+      finalStartColumn = cachedSelection.startColumn;
+      finalEndColumn = cachedSelection.endColumn;
+
+      console.log('🔧 [COORDINATES UPDATED] After invalid coordinate fix:', {
+        finalStartLine,
+        finalEndLine,
+        finalStartColumn,
+        finalEndColumn,
+      });
+    }
     const useLine = cachedSelection?.startLine ?? finalStartLine;
     const line = lines[useLine] || '';
     // Use corrected coordinates if available
@@ -831,6 +956,151 @@ export function applyPartialUpdate(
 
     const selectedText = line.slice(useStartColumn, useEndColumn);
     const reconstructedLine = before + selectedText + after;
+
+    if (cachedSelection?.originalText) {
+      const normalizeForValidation = (text: string) => text.trim();
+      const normalizedOriginal = normalizeForValidation(cachedSelection.originalText);
+      const normalizedSelected = normalizeForValidation(selectedText);
+
+      if (normalizedOriginal !== normalizedSelected) {
+        console.warn('⚠️ [SINGLE-LINE VALIDATION] Text mismatch at coordinates - searching for match...', {
+          lineNumber: useLine,
+          coordinates: { startColumn: useStartColumn, endColumn: useEndColumn },
+          expectedOriginalText: cachedSelection.originalText.substring(0, 100),
+          actualTextAtCoordinates: selectedText.substring(0, 100),
+          fullLine: line.substring(0, 200),
+          action: 'Will search current line and nearby lines for correct location',
+        });
+
+        // Search for the text on this line first
+        const searchText = cachedSelection.originalText;
+        let foundColumnIndex = line.indexOf(searchText);
+        let foundLine = useLine;
+
+        // If exact match fails, try searching for the trimmed version
+        if (foundColumnIndex === -1) {
+          const trimmedSearchText = searchText.trim();
+          foundColumnIndex = line.indexOf(trimmedSearchText);
+
+          if (foundColumnIndex !== -1) {
+            console.log('✅ [SINGLE-LINE SEARCH] Found TRIMMED text on same line!', {
+              originalText: searchText.substring(0, 50),
+              trimmedText: trimmedSearchText.substring(0, 50),
+              foundAtColumn: foundColumnIndex,
+              willUseThisInstead: true,
+            });
+
+            // Update coordinates using the trimmed text length
+            before = line.slice(0, foundColumnIndex);
+
+            cachedSelection = {
+              ...cachedSelection,
+              startColumn: foundColumnIndex,
+              endColumn: foundColumnIndex + trimmedSearchText.length,
+            };
+
+            console.log('🔧 [COORDINATES CORRECTED WITH TRIMMED TEXT]:', {
+              oldStartColumn: useStartColumn,
+              oldEndColumn: useEndColumn,
+              newStartColumn: foundColumnIndex,
+              newEndColumn: foundColumnIndex + trimmedSearchText.length,
+            });
+          }
+        }
+
+        if (foundColumnIndex !== -1) {
+          if (line.indexOf(searchText) !== -1) {
+            // Found exact match
+            foundColumnIndex = line.indexOf(searchText);
+            console.log('✅ [SINGLE-LINE SEARCH] Found exact text on same line!', {
+              originalColumn: useStartColumn,
+              foundAtColumn: foundColumnIndex,
+              willUpdateCoordinates: true,
+            });
+
+            before = line.slice(0, foundColumnIndex);
+
+            cachedSelection = {
+              ...cachedSelection,
+              startColumn: foundColumnIndex,
+              endColumn: foundColumnIndex + searchText.length,
+            };
+
+            console.log('🔧 [COORDINATES CORRECTED]:', {
+              oldStartColumn: useStartColumn,
+              oldEndColumn: useEndColumn,
+              newStartColumn: foundColumnIndex,
+              newEndColumn: foundColumnIndex + searchText.length,
+            });
+          }
+        } else {
+          // Text not on this line - search nearby lines (same as multi-line fuzzy match logic)
+          console.warn('⚠️ [SINGLE-LINE SEARCH] Text not on specified line - searching ±50 lines...', {
+            specifiedLine: useLine,
+            searchText: searchText.substring(0, 100),
+          });
+
+          let found = false;
+          const searchWindowStart = Math.max(0, useLine - 50);
+          const searchWindowEnd = Math.min(lines.length - 1, useLine + 50);
+
+          for (let i = searchWindowStart; i <= searchWindowEnd; i++) {
+            const col = lines[i].indexOf(searchText);
+            if (col !== -1) {
+              foundLine = i;
+              foundColumnIndex = col;
+              found = true;
+              console.log('✅ [SINGLE-LINE SEARCH] Found text on different line!', {
+                specifiedLine: useLine,
+                actualLine: i,
+                lineOffset: i - useLine,
+                foundAtColumn: col,
+                willUpdateCoordinates: true,
+              });
+
+              // Update all variables for the new location
+              before = lines[i].slice(0, col);
+
+              cachedSelection = {
+                ...cachedSelection,
+                startLine: i,
+                endLine: i,
+                startColumn: col,
+                endColumn: col + searchText.length,
+              };
+
+              // Update finalStartLine for downstream logic
+              finalStartLine = i;
+              finalEndLine = i;
+              finalStartColumn = col;
+              finalEndColumn = col + searchText.length;
+
+              break;
+            }
+          }
+
+          if (!found) {
+            console.error('❌ [SINGLE-LINE SEARCH FAILED] Text not found within ±50 lines!', {
+              searchedLines: `${searchWindowStart} to ${searchWindowEnd}`,
+              searchText: searchText.substring(0, 100),
+              decision: 'Returning original content unchanged',
+            });
+            return originalContent;
+          }
+        }
+
+        console.log('✅ [SINGLE-LINE VALIDATION] Found and corrected coordinates', {
+          lineNumber: foundLine,
+          column: foundColumnIndex,
+          matchedText: searchText.substring(0, 100),
+        });
+      } else {
+        console.log('✅ [SINGLE-LINE VALIDATION PASSED] originalText matches text at coordinates', {
+          lineNumber: useLine,
+          matchedText: selectedText.substring(0, 100),
+        });
+      }
+    }
 
     // If reconstruction doesn't match, the column coordinates are wrong
     if (reconstructedLine !== line) {
@@ -849,9 +1119,6 @@ export function applyPartialUpdate(
       return originalContent;
     }
 
-    // we need to handle it as a multi-line replacement
-    // NOTE: updateLines is already declared at line 649, don't redeclare it here
-    console.log('updateLinesLength', updateLines.length);
 
     // This happens when the first line of updateContent duplicates what's in 'before'
     if (updateContent.includes('\n') && updateLines.length > 0 && before.trim()) {
@@ -1008,10 +1275,8 @@ export function applyPartialUpdate(
       return finalResult;
     }
 
-    // CRITICAL FIX: Check if updateContent already includes the indentation from 'before'
-    // This happens when LLM provides the full replacement including leading whitespace
     let effectiveBefore = before;
-    const effectiveUpdateContent = updateContent;
+    let effectiveUpdateContent = updateContent;
 
     // Only check if 'before' is pure whitespace (indentation)
     if (before.trim() === '' && before.length > 0 && updateContent.length > 0) {
@@ -1040,6 +1305,11 @@ export function applyPartialUpdate(
     const afterEnd = lines[finalEndLine]?.slice(finalEndColumn) || '';
     const before = lines.slice(0, finalStartLine);
     const after = lines.slice(finalEndLine + 1);
+
+    const actuallyDeleting = lines
+      .slice(finalStartLine, finalEndLine + 1)
+      .join('\n');
+    const llmSaidToDelete = cachedSelection?.originalText || '(no originalText provided)';
 
     // Verify that the selected text actually exists across the specified lines
     const firstLineOriginal = lines[finalStartLine] || '';
@@ -1224,7 +1494,6 @@ export function applyAllPartialUpdates(
   isStreaming?: boolean,
   conversationId?: string | null,
 ) {
-  // CRITICAL: Capture the call stack to identify WHERE this is being called from
   const callStack = new Error().stack;
   const callSite = callStack?.split('\n')[2]?.trim() || 'UNKNOWN';
 
@@ -1305,7 +1574,6 @@ export function applyAllPartialUpdates(
 
   const updateArtifacts = Object.values(artifacts)
     .filter((a: any) => {
-      // CRITICAL: Only process artifacts that are marked as updates
       const _isUpdate = a && a.isUpdate === true;
       const _isWithinTimeRange =
         !targetArtifactId || (a.lastUpdateTime && a.lastUpdateTime <= targetTime);
@@ -1349,6 +1617,7 @@ export function applyAllPartialUpdates(
   }
 
   let count = 0;
+  const baseContent = mergedContent; // Store the original base content for logging
 
   for (const updateArtifact of updateArtifacts) {
     // snippetContent contains the ORIGINAL snippet from LLM
@@ -1356,11 +1625,11 @@ export function applyAllPartialUpdates(
     const updateContent = (updateArtifact as any).snippetContent || updateArtifact.content;
     const newContent = applyPartialUpdate(
       mergedContent, // Build on previous updates sequentially
-      updateContent, // CRITICAL: Use SNIPPET, not merged content!
+      updateContent,
       updateArtifact.id,
       count,
-      artifacts, // Pass all artifacts for fallback selection lookup
-      false, // CRITICAL FIX: DO NOT skip validation! Let the validation logic find the correct location of originalText
+      artifacts,
+      false,
     );
 
     if (newContent !== mergedContent) {
