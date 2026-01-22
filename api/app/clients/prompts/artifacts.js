@@ -2073,8 +2073,16 @@ const generateArtifactsPrompt = ({ endpoint, artifacts }) => {
   if (artifacts === ArtifactModes.CUSTOM) {
     return null;
   }
+  let prompt = artifactsPrompt;
+  if (endpoint !== EModelEndpoint.anthropic) {
+    prompt = artifactsOpenAIPrompt;
+  }
 
-// Export the main Artifact component as ArtifactUpdate for backward compatibility
-// Both artifact and artifactupdate directives now use the same component
-export const ArtifactUpdate = Artifact;
-export const Selection = SelectionComponent;
+  if (artifacts === ArtifactModes.SHADCNUI) {
+    prompt += generateShadcnPrompt({ components, useXML: endpoint === EModelEndpoint.anthropic });
+  }
+
+  return prompt;
+};
+
+module.exports = generateArtifactsPrompt;
