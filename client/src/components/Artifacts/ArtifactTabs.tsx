@@ -228,8 +228,6 @@ export default function ArtifactTabs({
   const initializeCache = useCallback(
     async (artifactId: string) => {
       if (artifactId && !cacheInitialized) {
-        console.log('🔄 [ArtifactTabs] Initializing cache for artifact:', artifactId);
-
         try {
           // Load artifact-specific cache from database
           await artifactCache.initWithDatabase(artifactId);
@@ -249,7 +247,6 @@ export default function ArtifactTabs({
       setCurrentCode(undefined);
       initializeCache(artifact.id);
     }
-    console.log('artifact.id', artifact.id, 'lastIdRef.current', lastIdRef.current);
     lastIdRef.current = artifact.id;
   }, [setCurrentCode, artifact.id, initializeCache]);
 
