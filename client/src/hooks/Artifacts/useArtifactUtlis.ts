@@ -1016,7 +1016,6 @@ export function applyPartialUpdate(
                 matchType: 'EXACT',
               };
               }
-              
             // Only apply fuzzy matching for strings >= 15 characters
             if (originalText.trim().length < 15) {
               return { found: false };
@@ -1051,7 +1050,7 @@ export function applyPartialUpdate(
                 endColumn: line.length,
                 matchType: 'PREFIX',
               };
-              }
+            }
 
             // Strategy 4: Contains match (handles partial attribute values)
             if (trimmedOriginal.length >= 20 && line.includes(trimmedOriginal)) {
@@ -1059,14 +1058,14 @@ export function applyPartialUpdate(
               let endColumn = matchIndex + trimmedOriginal.length;
 
               // Extend to closing quote if this is an attribute
-                  const attributeMatch = trimmedOriginal.match(/^(\w+)="(.*)$/);
-                  if (attributeMatch) {
+              const attributeMatch = trimmedOriginal.match(/^(\w+)="(.*)$/);
+              if (attributeMatch) {
                 const afterMatch = line.substring(endColumn);
                 const closingQuote = afterMatch.indexOf('"');
                 if (closingQuote !== -1) {
                   endColumn += closingQuote + 1;
-                    }
-                  }
+                }
+              }
 
               return {
                 found: true,
@@ -1166,8 +1165,8 @@ export function applyPartialUpdate(
 
             // Strategy 7: Template literal pattern match (handles malformed templates)
             const looksLikeTemplate =
-                  (trimmedOriginal.includes('${') || trimmedOriginal.includes('`')) &&
-                  (trimmedOriginal.includes('\\n') || trimmedOriginal.includes('\\"'));
+              (trimmedOriginal.includes('${') || trimmedOriginal.includes('`')) &&
+              (trimmedOriginal.includes('\\n') || trimmedOriginal.includes('\\"'));
             if (looksLikeTemplate && trimmedOriginal.length >= 30) {
               let coreContent = trimmedOriginal
                 .replace(/^["']|["']$/g, '')
@@ -1175,26 +1174,26 @@ export function applyPartialUpdate(
               coreContent = coreContent.replace(/\\n/g, '\n').replace(/\\"/g, '"');
 
               const patterns: string[] = [];
-                  const comparisonMatch = coreContent.match(/(\w+)\s*===\s*["']([^"']+)["']/);
+              const comparisonMatch = coreContent.match(/(\w+)\s*===\s*["']([^"']+)["']/);
               if (comparisonMatch)
                 patterns.push(`${comparisonMatch[1]}\\s*===\\s*["']${comparisonMatch[2]}["']`);
 
-                  const includesMatch = coreContent.match(
-                    /["']([^"']*)['"]\s*\.\s*includes\s*\(\s*(\w+)\s*\)/,
-                  );
+              const includesMatch = coreContent.match(
+                /["']([^"']*)['"]\s*\.\s*includes\s*\(\s*(\w+)\s*\)/,
+              );
               if (includesMatch)
                 patterns.push(
                   `["']${includesMatch[1]}["']\\s*\\.\\s*includes\\s*\\(\\s*${includesMatch[2]}\\s*\\)`,
                 );
 
-                  const cssMatch = coreContent.match(/(bg-\w+-\d+|text-\w+)/g);
+              const cssMatch = coreContent.match(/(bg-\w+-\d+|text-\w+)/g);
               if (cssMatch && cssMatch.length >= 2) patterns.push(cssMatch.slice(0, 2).join('.*'));
 
               if (patterns.length >= 2) {
                 const combinedPattern = new RegExp(patterns.join('.*'), 'i');
                 if (combinedPattern.test(line)) {
-                      const classNameStart = line.indexOf('className=');
-                      if (classNameStart !== -1) {
+                  const classNameStart = line.indexOf('className=');
+                    if (classNameStart !== -1) {
                     return {
                       found: true,
                       startLine: searchLine,
@@ -1270,10 +1269,6 @@ export function applyPartialUpdate(
                 globalStartColumn = 0;
                 globalEndColumn = lines[searchEndLine].length;
                 globalFoundMatch = true;
-                console.log(
-                  '[GLOBAL SEARCH] Found multi-line originalText starting at line',
-                  searchLine,
-                );
                 break;
               } else if (potentialMatch.includes(normalizedOriginalText)) {
                 // Text found but need to calculate exact position
@@ -1308,23 +1303,30 @@ export function applyPartialUpdate(
 
                 if (extracted === normalizedOriginalText) {
                   globalFoundMatch = true;
-                  console.log(
-                    '✅ [GLOBAL SEARCH] Found originalText with calculated coordinates at line',
-                    globalStartLine,
-                  );
                   break;
                 }
               }
 
-              // FUZZY MATCH for multi-line: Check if first line starts with originalText first line
-              // Require at least 20 characters in the first line to ensure uniqueness
-              if (!globalFoundMatch && normalizedOriginalText.trim().length >= 20) {
-                const originalFirstLine = textLines[0].trim();
-                const actualFirstLine = lines[searchLine]?.trim() || '';
+              // FUZZY MATCH for multi-line: Try fuzzy matching on the potentialMatch we just built
+              // Only attempt fuzzy matching if we haven't found an exact match yet
+              if (!globalFoundMatch && textLines.length > 0) {
 
+                const originalFirstLine = textLines[0].trim();
+                const actualFirstLine = potentialLines[0]?.trim() || '';
+
+                const looksLikeCSSBlock = originalFirstLine.endsWith('{') && textLines.length > 2;
+                const looksFunctionOrBlock =
+                  originalFirstLine.match(/^(function|const|let|var|if|for|while)\s+/) ||
+                  originalFirstLine.endsWith('{') ||
+                  originalFirstLine.endsWith('(');
+
+                // For CSS blocks or code blocks, reduce minimum length requirement to 5 characters
+                const minLengthRequired = looksLikeCSSBlock || looksFunctionOrBlock ? 5 : 20;
+
+                // FUZZY MATCH 1: Exact prefix match
                 if (
                   actualFirstLine.length > 0 &&
-                  originalFirstLine.length >= 20 &&
+                  originalFirstLine.length >= minLengthRequired &&
                   actualFirstLine.startsWith(originalFirstLine)
                 ) {
                   // Found a fuzzy match - use full lines
@@ -1334,14 +1336,16 @@ export function applyPartialUpdate(
                   globalEndColumn = lines[globalEndLine]?.length || 0;
                   globalFoundMatch = true;
                   console.log(
-                    '[FUZZY MULTI-LINE SEARCH] Found multi-line text starting with originalText at line',
+                    '✅ [FUZZY MULTI-LINE SEARCH] Found multi-line text starting with originalText at line',
                     searchLine,
                     {
                       originalFirstLineLength: originalFirstLine.length,
                       actualFirstLineLength: actualFirstLine.length,
                       match: 'PREFIX',
                       expectedLines: textLines.length,
-                      minimumLength: 20,
+                      minimumLength: minLengthRequired,
+                      isCSSBlock: looksLikeCSSBlock,
+                      isFunctionOrBlock: looksFunctionOrBlock,
                     },
                   );
                   break;
@@ -1351,11 +1355,15 @@ export function applyPartialUpdate(
                 const normalizedOriginalFirstLine = normalizeForComparison(originalFirstLine);
                 const normalizedActualFirstLine = normalizeForComparison(actualFirstLine);
 
+                // ALSO check if the FULL potentialMatch is close to normalizedOriginalText
+                const normalizedPotentialMatch = normalizeForComparison(potentialMatch);
+
                 if (
                   actualFirstLine.length > 0 &&
-                  normalizedOriginalFirstLine.length >= 20 &&
+                  normalizedOriginalFirstLine.length >= minLengthRequired &&
                   (normalizedActualFirstLine.startsWith(normalizedOriginalFirstLine) ||
-                    normalizedActualFirstLine.includes(normalizedOriginalFirstLine))
+                    normalizedActualFirstLine.includes(normalizedOriginalFirstLine) ||
+                    normalizedPotentialMatch.startsWith(normalizedOriginalText))
                 ) {
                   // Found a normalized fuzzy match
                   globalStartLine = searchLine;
@@ -1376,6 +1384,82 @@ export function applyPartialUpdate(
                     },
                   );
                   break;
+                }
+
+                // FUZZY MATCH 3 for multi-line: TRUNCATED TEXT (handles incomplete last line)
+                const originalLastLine = textLines[textLines.length - 1].trim();
+                const looksLikeTruncatedLastLine =
+                  originalLastLine.length < 10 || // Very short last line
+                  originalLastLine.match(/[:#][a-f0-9]{1,5}$/i) || // Incomplete hex color like #2563e
+                  originalLastLine.endsWith(':') || // Incomplete CSS property
+                  originalLastLine.match(/\w+\s*\($/) || // Incomplete function call
+                  (!originalLastLine.endsWith(';') && !originalLastLine.endsWith('}')); // CSS without ending
+
+                if (
+                  actualFirstLine.length > 0 &&
+                  originalFirstLine.length >= Math.min(minLengthRequired, 10) && // Use lower threshold for truncated text
+                  actualFirstLine.startsWith(originalFirstLine) &&
+                  looksLikeTruncatedLastLine
+                ) {
+                  // Found a match! Since the last line is truncated, we need to find where the block actually ends
+                  console.log(
+                    '🔍 [FUZZY MULTI-LINE SEARCH - TRUNCATED] Detected truncated multi-line text!',
+                    {
+                      originalFirstLine: originalFirstLine.substring(0, 50),
+                      originalLastLine: originalLastLine,
+                      actualFirstLine: actualFirstLine.substring(0, 50),
+                      looksLikeTruncatedLastLine,
+                      reason: 'Last line appears incomplete - extending to find actual end',
+                    },
+                  );
+
+                  // Start from the matched line
+                  globalStartLine = searchLine;
+                  const actualLineRaw = lines[searchLine] || '';
+                  const indentMatch = actualLineRaw.match(/^(\s*)/);
+                  globalStartColumn = indentMatch ? indentMatch[1].length : 0;
+
+                  let foundEnd = false;
+                  for (
+                    let endSearchLine = searchLine + textLines.length - 1;
+                    endSearchLine < Math.min(searchLine + textLines.length + 5, lines.length);
+                    endSearchLine++
+                  ) {
+                    const endLineContent = lines[endSearchLine]?.trim() || '';
+
+                    const looksComplete =
+                      endLineContent.endsWith(';') ||
+                      endLineContent.endsWith('}') ||
+                      endLineContent.endsWith(')') ||
+                      (endLineContent.match(/[:#][a-f0-9]{6}/i) && // Complete hex color
+                        endLineContent.endsWith(';'));
+
+                    if (looksComplete) {
+                      globalEndLine = endSearchLine;
+                      globalEndColumn = lines[endSearchLine]?.length || 0;
+                      foundEnd = true;
+                      globalFoundMatch = true;
+                      break;
+                    }
+                  }
+
+                  if (foundEnd) {
+                    break; // Exit the main search loop
+                  } else {
+                    // Couldn't find a clear end - use expected line count as fallback
+                    globalEndLine = Math.min(lines.length - 1, searchLine + textLines.length - 1);
+                    globalEndColumn = lines[globalEndLine]?.length || 0;
+                    globalFoundMatch = true;
+                    console.warn(
+                      '⚠️ [FUZZY MULTI-LINE SEARCH - TRUNCATED FALLBACK] Could not find clear end - using expected line count',
+                      {
+                        startLine: globalStartLine,
+                        endLine: globalEndLine,
+                        totalLines: globalEndLine - globalStartLine + 1,
+                      },
+                    );
+                    break;
+                  }
                 }
               }
             }
@@ -1553,16 +1637,15 @@ export function applyPartialUpdate(
     }
   }
 
-      if (finalStartLine === finalEndLine) {
-        console.log('📍 [SINGLE-LINE PATH] Entering single-line merge logic');
-        // Single-line selection: replace only the substring
-        const line = lines[finalStartLine] || '';
-        let before = line.slice(0, finalStartColumn);
-        const after = line.slice(finalEndColumn);
+  if (finalStartLine === finalEndLine) {
+    console.log('📍 [SINGLE-LINE PATH] Entering single-line merge logic');
+    // Single-line selection: replace only the substring
+    const line = lines[finalStartLine] || '';
+    let before = line.slice(0, finalStartColumn);
+    const after = line.slice(finalEndColumn);
 
-        const selectedText = line.slice(finalStartColumn, finalEndColumn);
-        const reconstructedLine = before + selectedText + after;
-
+    const selectedText = line.slice(finalStartColumn, finalEndColumn);
+    const reconstructedLine = before + selectedText + after;
 
     // If reconstruction doesn't match, the column coordinates are wrong
     if (reconstructedLine !== line) {
@@ -1675,7 +1758,6 @@ export function applyPartialUpdate(
     return sanitizedResult;
   } else {
 
-    // 🔍 SHOW WHAT'S ACTUALLY AT THESE COORDINATES
     const lineAtStart = lines[finalStartLine] || '';
     const textAtCoordinates =
       finalStartLine === finalEndLine
@@ -1909,12 +1991,7 @@ export function applyPartialUpdate(
       }
     }
 
-    // Check for bracket mismatches that might indicate wrong coordinates
-    const openingTagsInDeleted = selectedTextForDeletion.match(/<[\w-]+[^/>]*>/g) || [];
-    const openingTagsInUpdate = updateContent.match(/<[\w-]+[^/>]*>/g) || [];
-
-    const isFullLineSelection =
-      finalStartColumn === 0 &&
+    finalStartColumn === 0 &&
       (finalAfterEnd.trim() === '' || correctedEndColumn === (lines[finalEndLine]?.length || 0));
 
     // This happens when beforeStart is just indentation but the update includes the full line
