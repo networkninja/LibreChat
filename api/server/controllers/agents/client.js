@@ -939,6 +939,7 @@ class AgentClient extends BaseClient {
           agents,
           indexTokenCountMap,
           runId: this.responseMessageId,
+          streaming: agent.model_parameters.streaming,
           signal: abortController.signal,
           customHandlers: this.options.eventHandlers,
           requestBody: config.configurable.requestBody,

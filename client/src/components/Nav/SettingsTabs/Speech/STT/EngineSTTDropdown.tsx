@@ -12,12 +12,13 @@ const EngineSTTDropdown: React.FC<EngineSTTDropdownProps> = ({ external }) => {
   const localize = useLocalize();
   const [engineSTT, setEngineSTT] = useRecoilState<string>(store.engineSTT);
 
-  const endpointOptions = external
+   const endpointOptions = external
     ? [
-        { value: 'browser', label: localize('com_nav_browser') },
-        { value: 'external', label: localize('com_nav_external') },
-      ]
+      { value: 'browser', label: localize('com_nav_browser') },
+      { value: 'external', label: localize('com_nav_external') },
+    ]
     : [{ value: 'browser', label: localize('com_nav_browser') }];
+
 
   const handleSelect = (value: string) => {
     setEngineSTT(value);

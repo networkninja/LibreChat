@@ -379,8 +379,8 @@ export const anthropicSettings = {
     step: 1 as const,
     default: DEFAULT_MAX_OUTPUT,
     reset: (modelName: string) => {
-      if (/claude-(?:sonnet|haiku)[-.]?[4-9]/.test(modelName)) {
-        return CLAUDE_4_64K_MAX_OUTPUT;
+      if (/claude-[3-4][-.][057]\-sonnet/.test(modelName)) {
+        return DEFAULT_MAX_OUTPUT;
       }
 
       if (/claude-opus[-.]?(?:[5-9]|4[-.]?([5-9]|\d{2,}))/.test(modelName)) {
