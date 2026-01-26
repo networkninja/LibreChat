@@ -1311,14 +1311,8 @@ export function Artifact({
     setArtifact(loadedArtifact);
     setCurrentArtifactId(loadedArtifact.id);
     lastReconstructedArtifactId.current = _currentArtifactId;
-  }, [
-    _currentArtifactId,
-    _artifacts,
-    setArtifacts,
-    conversationId,
-    setCurrentArtifactId,
-    artifact,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [_currentArtifactId, _artifacts, setArtifacts, conversationId, setCurrentArtifactId]);
 
   useEffect(() => {
     // Compose a unique key for the artifact update
@@ -1484,16 +1478,13 @@ function SelectionComponent({
       });
       return;
     }
-    let originalTextMatch = selectionText.match(/-?\s*originalText:\s*"([\s\S]*?)"\s*(?:\n|$)/);
+    let originalTextMatch = selectionText.match(
+      /-?\s*originalText:\s*([\s\S]*?)(?=\n\s*-?\s*(?:startLine|endLine|startColumn|endColumn):)/,
+    );
+
+    // Fallback: If no following field found, match to end of content
     if (!originalTextMatch) {
-      // Fallback 1: More greedy - match everything up to the quote before startLine/endLine
-      originalTextMatch = selectionText.match(
-        /-?\s*originalText:\s*"([\s\S]+?)"\s*(?=\n\w+:|\n$|$)/,
-      );
-    }
-    if (!originalTextMatch) {
-      // Fallback 2: Try without quotes for single-word values
-      originalTextMatch = selectionText.match(/-?\s*originalText:\s*([^\n]+)/);
+      originalTextMatch = selectionText.match(/-?\s*originalText:\s*([\s\S]*?)$/);
     }
 
     const startLineMatch = selectionText.match(/-?\s*startLine:\s*(\d+)/);
@@ -1512,14 +1503,66 @@ function SelectionComponent({
     const startLine = parseInt(startLineMatch[1], 10) - 1;
     const endLine = parseInt(endLineMatch[1], 10) - 1;
 
+    let originalText = originalTextMatch ? originalTextMatch[1] : '';
+
+    if (!originalText || originalText.trim() === '') {
+      console.error('❌ [Selection Parsing] FAILED to extract originalText!', {
+        selectionText,
+        startLine: parseInt(startLineMatch[1], 10),
+        endLine: parseInt(endLineMatch[1], 10),
+        startColumn,
+        endColumn,
+        PROBLEM: 'Regex did not capture originalText - selection block may be malformed',
+        IMPACT: 'Merge will fail with "empty originalText" error',
+        REFUSING: 'Not saving selection to prevent merge errors',
+      });
+      return;
+    }
+
+    const hasBackslashEscaped = originalText.includes('\\"') || originalText.includes("\\'");
+    const hasDoubleEscaped = originalText.includes("''") || originalText.includes('""');
+
+    if (hasBackslashEscaped || hasDoubleEscaped) {
+
+      // Unescape backslash-escaped quotes: \" -> " and \' -> '
+      if (hasBackslashEscaped) {
+        originalText = originalText.replace(/\\"/g, '"').replace(/\\'/g, "'");
+      }
+
+      if (hasDoubleEscaped) {
+        // SPECIAL CASE: Handle quote-within-quote pattern like handleOperator(''+'')}
+        // This pattern appears when LLM escapes a single character that is itself a quote
+        // Pattern: (''+...'') where ... can be any single character including special chars
+        originalText = originalText.replace(/\(''(.)''\)/g, "('$1')");
+        originalText = originalText.replace(/\(""(.)""\)/g, '("$1")');
+
+        // Match patterns like handleClick(''0'') and replace with handleClick('0')
+        // Match patterns like (''text'') and replace with ('text')
+        originalText = originalText.replace(/\(''([^']*)''\)/g, "('$1')");
+        originalText = originalText.replace(/\(""([^"]*)""\)/g, '("$1")');
+
+        // Also handle cases where double quotes appear in attribute values
+        originalText = originalText.replace(/=''([^']*)''/g, "='$1'");
+        originalText = originalText.replace(/=""([^"]*)""/g, '="$1"');
+      }
+    }
+
+    const hasTemplateLiteralSyntax = originalText.includes('${');
+    if (hasTemplateLiteralSyntax) {
+      console.log('🔧 [Selection Parsing] Detected template literal syntax - checking format...', {
+        before: originalText.substring(0, 200),
+        hasDollarBrace: hasTemplateLiteralSyntax,
+      });
+    }
+
     const selectionContext = {
-      originalText: originalTextMatch ? originalTextMatch[1] : '',
+      originalText,
       startLine,
       endLine,
-      startColumn, // Use the variable with default value (already computed above)
-      endColumn, // Use the variable with default value (already computed above)
+      startColumn,
+      endColumn,
       artifactMessageId: messageId,
-      fileKey: `artifact_${messageId}`, // Required field for ArtifactSelectionContext
+      fileKey: `artifact_${messageId}`,
     };
 
     // Strategy: Use sessionStorage with messageId as key

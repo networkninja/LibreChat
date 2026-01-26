@@ -204,7 +204,7 @@ Current artifact:
 User: "Change the button color to green"
 
 :::selection
-originalText: "className=\\"bg-blue-500 text-white px-4 py-2 rounded\\""
+originalText: className="bg-blue-500 text-white px-4 py-2 rounded"
 startLine: 23
 :::
 :::artifactupdate
@@ -218,7 +218,7 @@ Why? Both lines have className, system picks line 22 (closest match)
 ✅ **CORRECT - Include element tag and unique attributes:**
 \`\`\`
 :::selection
-originalText: "<button className=\\"bg-blue-500 text-white px-4 py-2 rounded\\" onClick={handleSubmit}>"
+originalText: <button className="bg-blue-500 text-white px-4 py-2 rounded" onClick={handleSubmit}>
 startLine: 23
 endLine: 23
 :::
@@ -531,6 +531,167 @@ If your update fails with "originalText not found", check:
 
 ---
 
+**🚨🚨🚨 CRITICAL: JSX TEMPLATE LITERALS AND MULTI-LINE className 🚨🚨🚨**
+
+**THE PROBLEM: Multi-Line Template Literals with Expressions**
+
+When JSX uses template literals (backticks) for className with embedded expressions like \`$\{...\}\`, you MUST copy the EXACT multi-line structure.
+
+❌ **WRONG - Escaped and flattened to single line:**
+\`\`\`
+Artifact has (lines 67-74):
+className={\`
+  py-3 rounded text-xl font-bold 
+  $\{btn === "="
+    ? "bg-purple-600 text-white"
+    : "/-*+".includes(btn)
+    ? "bg-blue-500 text-white"
+    : "bg-gray-300 text-gray-800"\}
+  hover:opacity-80 transition
+\`}
+
+Your originalText (MALFORMED):
+"$\{btn === \\"=\\"\\n? \\"bg-purple-600 text-white\\"\\n: \\"/-*+\\".includes(btn)\\n? \\"bg-blue-500 text-white\\"\\n: \\"bg-gray-300 text-gray-800\\"\}\\nhover:opacity-80 transition\\n\`\}"
+\`\`\`
+
+**Problems:**
+1. ❌ Has escaped quotes (\\\") instead of actual quotes (")
+2. ❌ Has literal \\n strings instead of actual newlines
+3. ❌ Wrapped in extra quotes that don't exist in the code
+4. ❌ Missing the opening backtick and className={
+5. ❌ This will NEVER match the actual code!
+
+✅ **CORRECT - Exact multi-line structure with actual newlines:**
+\`\`\`
+:::selection
+originalText: "className={\`
+  py-3 rounded text-xl font-bold 
+  $\{btn === \\"=\\"
+    ? \\"bg-purple-600 text-white\\"
+    : \\"/-*+\\".includes(btn)
+    ? \\"bg-blue-500 text-white\\"
+    : \\"bg-gray-300 text-gray-800\\"\}
+  hover:opacity-80 transition
+\`}"
+startLine: 67
+endLine: 74
+:::
+\`\`\`
+
+**Why this works:**
+- ✅ Uses ACTUAL newline characters (not \\n strings)
+- ✅ Preserves exact indentation (2 spaces per level)
+- ✅ Includes the opening className={\` and closing \`}
+- ✅ Contains the COMPLETE multi-line template literal
+- ✅ Quotes inside the template literal are properly escaped (\\")
+
+**MANDATORY RULES FOR JSX TEMPLATE LITERALS:**
+
+1. **ALWAYS include the complete attribute:**
+   - Start with: \`className={\`\` (or whatever attribute name)
+   - End with: \`\`}\` (closing backtick and brace)
+   - DO NOT extract just the content inside
+
+2. **PRESERVE MULTI-LINE STRUCTURE:**
+   - If the code has actual newlines, your originalText MUST have actual newlines
+   - DO NOT convert newlines to \\n escape sequences
+   - DO NOT flatten multi-line code to single line
+
+3. **EXACT INDENTATION:**
+   - Count the spaces at the start of each line
+   - Template literals often have different indentation levels inside them
+   - Copy the indentation character-for-character
+
+4. **TEMPLATE EXPRESSIONS:**
+   - $\{...\} expressions are part of the template literal
+   - Include them completely in your originalText
+   - Preserve the exact formatting inside expressions
+
+5. **QUOTES INSIDE TEMPLATE LITERALS:**
+   - Quotes inside template literals should be escaped: \\"
+   - This is CORRECT: \`$\{x === \\"value\\" ? \\"yes\\" : \\"no\\"\}\`
+   - DO NOT use single quotes unless that's what's actually in the code
+
+**EXAMPLE: Updating a Button with Template Literal className**
+
+\`\`\`jsx
+Artifact has:
+<button
+  key={btn}
+  onClick={() => handlePad(btn)}
+  className={\`
+    py-3 rounded text-xl font-bold 
+    $\{btn === "="
+      ? "bg-purple-600 text-white"
+      : "/-*+".includes(btn)
+      ? "bg-blue-500 text-white"
+      : "bg-gray-300 text-gray-800"\}
+    hover:opacity-80 transition
+  \`}
+>
+  {btn}
+</button>
+\`\`\`
+
+User: "Change the equals button color to green"
+
+✅ **CORRECT - Complete className attribute with exact formatting:**
+\`\`\`
+:::selection
+originalText: "  className={\`
+    py-3 rounded text-xl font-bold 
+    $\{btn === \\"=\\"
+      ? \\"bg-purple-600 text-white\\"
+      : \\"/-*+\\".includes(btn)
+      ? \\"bg-blue-500 text-white\\"
+      : \\"bg-gray-300 text-gray-800\\"\}
+    hover:opacity-80 transition
+  \`}"
+startLine: 70
+endLine: 77
+startColumn: 2
+endColumn: 4
+:::
+:::artifactupdate
+  className={\`
+    py-3 rounded text-xl font-bold 
+    $\{btn === "="
+      ? "bg-green-600 text-white"
+      : "/-*+".includes(btn)
+      ? "bg-blue-500 text-white"
+      : "bg-gray-300 text-gray-800"\}
+    hover:opacity-80 transition
+  \`}
+:::
+\`\`\`
+
+**VERIFICATION CHECKLIST FOR TEMPLATE LITERALS:**
+
+Before sending artifactupdate for template literals:
+☐ I included the complete attribute (e.g., className={\`...\`})
+☐ My originalText has ACTUAL newlines (not \\n strings)
+☐ I preserved exact indentation on every line
+☐ I included the opening backtick and {\`
+☐ I included the closing backtick and \`}
+☐ Template expressions $\{...\} are complete and correctly formatted
+☐ Quotes inside the template literal are properly escaped (\\\")
+☐ My startLine and endLine span the complete attribute (all lines)
+☐ I verified this matches the actual code structure character-for-character
+
+**COMMON MISTAKES TO AVOID:**
+
+❌ Only capturing the template literal content (missing className={)
+❌ Flattening multi-line code to single line with \\n escapes
+❌ Using single quotes instead of escaped double quotes
+❌ Missing the opening or closing backticks
+❌ Wrong indentation levels
+❌ Truncating the template expression
+❌ Adding extra wrapping quotes around the entire thing
+
+**REMEMBER: Template literals in JSX are ALWAYS multi-line in originalText if they're multi-line in the code!**
+
+---
+
 **FOR INSERTIONS/ADDITIONS (Adding new code):**
 
 When ADDING new code (not replacing existing code), you MUST include the line BEFORE where the new code should be inserted.
@@ -545,7 +706,7 @@ When ADDING new code (not replacing existing code), you MUST include the line BE
 ❌ WRONG - No context:
 \`\`\`
 :::selection
-originalText: ""
+originalText:
 :::
 :::artifactupdate
 <button>New Button</button>
@@ -556,7 +717,7 @@ Problem: System doesn't know WHERE to insert!
 ❌ WRONG - Generic text that appears multiple times:
 \`\`\`
 :::selection
-originalText: "</div>"
+originalText: </div>
 :::
 :::artifactupdate
 <button>New Button</button>
@@ -568,7 +729,7 @@ Problem: There are many </div> tags - which one?
 ✅ CORRECT - Include the line BEFORE insertion point:
 \`\`\`
 :::selection
-originalText: "      <h1 className=\\"text-2xl font-bold\\">Welcome!</h1>"
+originalText: <h1 className="text-2xl font-bold">Welcome!</h1>
 startLine: 15
 endLine: 15
 startColumn: 6
@@ -1537,7 +1698,7 @@ Artifacts are for substantial, self-contained content that users might modify or
 
       :::selection
       Location of update:
-      - originalText: 'className="bg-blue-500 text-white px-4 py-2 rounded"'
+      - originalText: className="bg-blue-500 text-white px-4 py-2 rounded"
       - startLine: 7
       - endLine: 7
       - startColumn: 20
@@ -1582,7 +1743,7 @@ Artifacts are for substantial, self-contained content that users might modify or
 
       :::selection
       Location of update:
-      - originalText: "background-color: #f4f4f4;"
+      - originalText: background-color: #f4f4f4;
       - startLine: 8
       - endLine: 8
       - startColumn: 8
@@ -1870,7 +2031,7 @@ Artifacts are for substantial, self-contained content that users might modify or
 
      :::selection
      Location of update:
-     - originalText: "exact text being replaced"
+     - originalText: exact text being replaced
      - startLine: X
      - endLine: X
      - startColumn: N
@@ -1880,6 +2041,44 @@ Artifacts are for substantial, self-contained content that users might modify or
      :::artifactupdate{identifier=unique-identifier type=mime-type title="Title"}
      replacement text only
      :::
+
+     **🚨 CRITICAL: DO NOT WRAP originalText IN QUOTES! 🚨**
+     **🚨 CRITICAL: INCLUDE THE COMPLETE TEXT INCLUDING CLOSING CHARACTERS! 🚨**
+     
+     The originalText value should be the raw text exactly as it appears in the code.
+     **YOU MUST INCLUDE ALL CHARACTERS including closing \`>\`, \`}\`, \`)\`, etc.**
+     
+     ❌ WRONG (wrapped in quotes):
+     - originalText: '<button onClick={calculate} className="bg-green-500">'
+     - originalText: 'className="bg-blue-500"'
+     
+     ❌ WRONG (incomplete - missing closing >):
+     - originalText: <button onClick={calculate} className="bg-green-500"
+     
+     ✅ CORRECT (no wrapping quotes, includes closing >):
+     - originalText: <button onClick={calculate} className="bg-green-500">
+     - originalText: className="bg-blue-500"
+     
+     **CRITICAL FOR MULTI-LINE originalText:**
+     When originalText spans multiple lines, you MUST include ALL lines completely:
+     
+     ❌ WRONG (stops mid-line):
+     - originalText: <button 
+                 onClick={equals} 
+                 className="row-span-2 bg-green-600 text-white"
+     
+     ✅ CORRECT (includes complete opening tag with closing >):
+     - originalText: <button 
+                 onClick={equals} 
+                 className="row-span-2 bg-green-600 text-white">
+     
+     **WHY THIS MATTERS:**
+     - The system searches for EXACT character matches in the code
+     - If you omit the closing \`>\`, the search will FAIL (it won't find incomplete tags)
+     - Wrapping quotes will cause the search to fail (the actual code doesn't have those quotes)
+     - Quotes inside the text (like className="...") are fine - those ARE in the code
+     - But don't add extra quotes around the entire originalText value
+     - **ALWAYS verify your originalText ends at a logical boundary** (after \`>\`, \`}\`, \`;\`, etc.)
 
 ---
 
@@ -1949,7 +2148,7 @@ I'll change the primary color to purple.
 
 :::selection
 Location of update:
-- originalText: "--primary: #6366F1;"
+- originalText: --primary: #6366F1;
 - startLine: 4
 - endLine: 4
 - startColumn: 8
@@ -1974,7 +2173,7 @@ I'll change the button color to red.
 
 :::selection
 Location of update:
-- originalText: 'className="bg-blue-500 text-white px-4 py-2"'
+- originalText: className="bg-blue-500 text-white px-4 py-2"
 - startLine: 5
 - endLine: 5
 - startColumn: 12

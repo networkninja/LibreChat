@@ -9,13 +9,9 @@
  */
 function cleanArtifactContent(content: string): string {
   let cleaned = content.trim();
-
-  // Remove opening and closing triple backticks (```language or just ```)
-  // This handles: ```javascript\n...code...\n``` or ```\n...code...\n```
-  cleaned = cleaned.replace(/^```[\w]*\s*\n?/, '').replace(/\n?```\s*$/, '');
-
-  // Remove triple single quotes if they exist (''')
-  cleaned = cleaned.replace(/^'''\s*\n?/, '').replace(/\n?'''\s*$/, '');
+  cleaned = cleaned.replace(/:\s*$/, '');
+  cleaned = cleaned.replace(/\n:+\s*\n/g, '\n');
+  cleaned = cleaned.replace(/\n:+\s*$/g, '\n');
 
   // Remove extra surrounding quotes that might have been added
   // Only if they appear at the very start and end
