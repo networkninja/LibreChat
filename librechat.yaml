@@ -77,37 +77,23 @@ endpoints:
 
   custom:
     - name: "NNI Models"
-      apiKey: "LITELLM KEY HERE"
+      apiKey: "YOUR-LITELLM-API-KEY-HERE"
       baseURL: "https://aimlapi-dev.networkninja.com/v1"
       models:
-        default: ["gpt-4o-0806"]
+        default: ["gpt-4.1-mini"]
         fetch: true
       titleConvo: true
-      titleModel: "gpt-4o-0806"
-      modelDisplayLabel: "networkninja personal"
+      titleModel: "gpt-4.1-mini"
+      modelDisplayLabel: "NetworkNinja LLMs"
 
 mcpServers:
-  github: 
-    command: npx
-    args:
-      - -y
-      - "/app/node_modules/.bin/mcp-server-github"
-    env: 
-      GITHUB_PERSONAL_ACCESS_TOKEN: XXX
-  sentry:
-    command: uv
-    args:
-      - --directory
-      - /app/servers/mcp_server_sentry
-      - run
-      - server.py
-      - --sentry_auth_token
-      - "YOUR AUTH TOKEN HERE"
-      - --sentry_organization_slug
-      - "ORG NAME HERE"
-      - --sentry_organization_id
-      - "ORG ID HERE"
-  mcp-atlassian:
-    url: http://mcp-atlassian:9000/sse
-
-
+  brave_search:
+    type: streamable-http
+    url: "http://brave-search-mcp:9001/mcp"
+  google-grounding:
+    type: "streamable-http"
+    url: "https://mapstools.googleapis.com/mcp"
+    headers:
+      X-Goog-Api-Key: "YOUR-GOOGLE-MAPS-API-KEY-HERE"
+    timeout: 60000
+    initTimeout: 15000
