@@ -38,6 +38,16 @@ RUN \
 
 COPY --chown=node:node . .
 
+# NNI UI customizations (must be applied before frontend build)
+# Hide Assistants Builder Knowledge Block
+RUN sed -i 's/<Knowledge/<Knowledge style={{ display: "none" }}/' /app/client/src/components/SidePanel/Builder/AssistantPanel.tsx
+# Hide Speech Options STT non-External options
+RUN sed -i 's/options={endpointOptions}/options={[{ value: "external", label: localize("com_nav_external") },]} /' /app/client/src/components/Nav/SettingsTabs/Speech/STT/EngineSTTDropdown.tsx
+# Hide Speech Options TTS non-External options
+RUN sed -i 's/options={endpointOptions}/options={[{ value: "external", label: localize("com_nav_external") },]} /' /app/client/src/components/Nav/SettingsTabs/Speech/TTS/EngineTTSDropdown.tsx
+# Alter Base Case Error Message, recommending a refresh to user
+RUN sed -i 's/Please contact the Admin./Please refresh the page and retry your request. If the problem persists, please contact an Admin. /' /app/api/server/middleware/abortMiddleware.js
+
 RUN \
     # React client build
     NODE_OPTIONS="--max-old-space-size=2048" npm run frontend; \
