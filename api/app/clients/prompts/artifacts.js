@@ -56,6 +56,13 @@ Artifacts are for substantial, self-contained content that users might modify or
     - React Components: "application/vnd.react"
       - Use this for displaying either: React elements, e.g. \`<strong>Hello World!</strong>\`, React pure functional components, e.g. \`() => <strong>Hello World!</strong>\`, React functional components with Hooks, or React component classes
       - When creating a React component, ensure it has no required props (or provide default values for all props) and use a default export.
+      - **CRITICAL: ALWAYS maintain valid JSX structure**
+        - NEVER add opening tags (e.g. \`<div>\`, \`<section>\`, \`<ul>\`) without their corresponding closing tags
+        - NEVER add closing tags without their opening tags
+        - When updating code, if you add an opening tag, you MUST also add its closing tag in the SAME update
+        - If you cannot include both opening AND closing tags in your update, DO NOT add either tag
+        - Self-closing tags (e.g. \`<img />\`, \`<input />\`, \`<br />\`) are safe to add alone
+        - ALWAYS keep components as functional components (use \`function\` or arrow functions), NEVER use class components
       - Use Tailwind classes for styling. DO NOT USE ARBITRARY VALUES (e.g. \`h-[600px]\`).
       - Base React is available to be imported. To use hooks, first import it at the top of the artifact, e.g. \`import { useState } from "react"\`
       - The lucide-react@0.394.0 library is available to be imported. e.g. \`import { Camera } from "lucide-react"\` & \`<Camera color="red" size={48} />\`
@@ -1086,6 +1093,93 @@ Result: ACCEPTED - this exact sequence only appears in Section 1!
 
 ---
 
+**🚨 CRITICAL: MAINTAIN VALID JSX/HTML STRUCTURE IN UPDATES 🚨**
+
+When updating React components or HTML artifacts, you MUST maintain valid structure:
+
+**ABSOLUTE RULES FOR JSX/HTML STRUCTURE:**
+
+❌ **NEVER add an opening tag without its closing tag**
+- Don't add \`<div>\` unless you also add \`</div>\` in the SAME update
+- Don't add \`<section>\` unless you also add \`</section>\` in the SAME update
+- Don't add \`<ul>\` unless you also add \`</ul>\` in the SAME update
+
+❌ **NEVER add a closing tag without its opening tag**
+- Don't add \`</div>\` without the matching \`<div>\`
+- Don't add \`</section>\` without the matching \`<section>\`
+
+✅ **SAFE: Self-closing tags can be added alone**
+- \`<img src="..." alt="..." />\` ✓
+- \`<input type="text" />\` ✓
+- \`<br />\` ✓
+- \`<hr />\` ✓
+
+✅ **CORRECT: Include both opening AND closing tags in the same update**
+\`\`\`
+:::artifactupdate
+<div className="container">
+  <h2>New Section</h2>
+  <p>This is new content</p>
+</div>
+:::
+\`\`\`
+
+❌ **WRONG: Adding opening tag in one update, closing tag later**
+\`\`\`
+Update 1:
+:::artifactupdate
+<div className="wrapper">
+  <h2>Title</h2>
+:::
+
+Update 2 (LATER):
+:::artifactupdate
+</div>
+:::
+\`\`\`
+**Result: BROKEN JSX! The artifact will fail to render between updates.**
+
+**COMPONENT STRUCTURE RULES:**
+
+✅ **ALWAYS use functional components**
+\`\`\`javascript
+// Correct - Function declaration
+export default function MyComponent() {
+  return <div>...</div>;
+}
+
+// Correct - Arrow function
+const MyComponent = () => {
+  return <div>...</div>;
+};
+
+export default MyComponent;
+\`\`\`
+
+❌ **NEVER use class components**
+\`\`\`javascript
+// Wrong - Class component
+class MyComponent extends React.Component {
+  render() {
+    return <div>...</div>;
+  }
+}
+\`\`\`
+
+**BEFORE SENDING YOUR UPDATE:**
+
+☐ Does my update include both opening AND closing tags for all non-self-closing elements?
+☐ Am I maintaining the component as a functional component?
+☐ Will the code be valid JSX/HTML after this update is applied?
+☐ If I can't include both tags, should I expand my update to include them?
+
+**IF YOU CAN'T INCLUDE BOTH OPENING AND CLOSING TAGS:**
+- Expand your update to include more context so both tags are included
+- OR ask the user to make the change manually
+- OR break it into a full component replacement instead of a partial update
+
+---
+
 **🚨 CRITICAL WARNING FOR ARTIFACTUPDATE 🚨**
 
 When making updates to artifacts:
@@ -1998,16 +2092,7 @@ Artifacts are for substantial, self-contained content that users might modify or
       \`\`\`
       :::
 
-  a. For updating existing artifacts, use artifactupdate with unquoted attribute values:
-
-      :::artifactupdate{identifier=unique-identifier type=mime-type title="Artifact Title"}
-      \`\`\`
-      Your updated artifact content here
-      \`\`\`
-      :::
-
-  b. Example of correct format:
-  a. For updating existing artifacts, use artifactupdate with unquoted attribute values:
+  2. **UPDATE** existing artifacts using this format:
 
       :::artifactupdate{identifier=unique-identifier type=mime-type title="Artifact Title"}
       Only the changed text here
@@ -2272,6 +2357,7 @@ const generateArtifactsPrompt = ({ endpoint, artifacts }) => {
   if (artifacts === ArtifactModes.CUSTOM) {
     return null;
   }
+
   let prompt = artifactsPrompt;
   if (endpoint !== EModelEndpoint.anthropic) {
     prompt = artifactsOpenAIPrompt;

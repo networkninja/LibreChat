@@ -4,9 +4,9 @@ import { useRecoilState, useSetRecoilState } from 'recoil';
 import { useLocation } from 'react-router-dom';
 import type { Pluggable } from 'unified';
 import type { Artifact } from '~/common';
-import { useMessageContext, useArtifactContext } from '~/Providers';
-import { logger, extractContent, isArtifactRoute } from '~/utils';
-import { artifactsState } from '~/store/artifacts';
+import { useMessageContext, useArtifactContext, useArtifactsContext } from '~/Providers';
+import { extractNodes, extractContent } from '~/utils';
+import { artifactsState, artifactRefreshTriggerState } from '~/store/artifacts';
 import ArtifactButton from './ArtifactButton';
 import { artifactCache } from './artifactCache';
 import store from '~/store';
@@ -955,7 +955,8 @@ export function Artifact({
     setArtifacts,
     setCurrentArtifactId,
     setArtifactsVisible,
-    fullyLoaded,
+    _setRefreshTrigger,
+    conversationId,
   ]);
 
   // Add this ref at the top-level of the component, not inside useEffect
@@ -1366,17 +1367,6 @@ export function Artifact({
     if (shouldUpdate) {
       lastUpdateKey.current = updateKey;
       lastProcessedMessageId.current = messageId;
-      console.log(
-        'resetting counter and updating artifact',
-        updateKey,
-        'hasContent:',
-        hasContent,
-        'isUpdate:',
-        isArtifactUpdateNode,
-        'content length:',
-        content.length,
-        _currentArtifactId,
-      );
       resetCounter();
       updateArtifact();
     }
@@ -1523,7 +1513,6 @@ function SelectionComponent({
     const hasDoubleEscaped = originalText.includes("''") || originalText.includes('""');
 
     if (hasBackslashEscaped || hasDoubleEscaped) {
-
       // Unescape backslash-escaped quotes: \" -> " and \' -> '
       if (hasBackslashEscaped) {
         originalText = originalText.replace(/\\"/g, '"').replace(/\\'/g, "'");

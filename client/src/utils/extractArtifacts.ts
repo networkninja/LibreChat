@@ -9,9 +9,13 @@
  */
 function cleanArtifactContent(content: string): string {
   let cleaned = content.trim();
-  cleaned = cleaned.replace(/:\s*$/, '');
-  cleaned = cleaned.replace(/\n:+\s*\n/g, '\n');
-  cleaned = cleaned.replace(/\n:+\s*$/g, '\n');
+
+  // Remove opening and closing triple backticks (```language or just ```)
+  // This handles: ```javascript\n...code...\n``` or ```\n...code...\n```
+  cleaned = cleaned.replace(/^```[\w]*\s*\n?/, '').replace(/\n?```\s*$/, '');
+
+  // Remove triple single quotes if they exist (''')
+  cleaned = cleaned.replace(/^'''\s*\n?/, '').replace(/\n?'''\s*$/, '');
 
   // Remove extra surrounding quotes that might have been added
   // Only if they appear at the very start and end
@@ -25,6 +29,8 @@ function cleanArtifactContent(content: string): string {
   // Remove trailing colons that are remnants of incomplete ::: delimiters during streaming
   // This handles cases where "::" or ":" remains at the end during partial streaming
   cleaned = cleaned.replace(/:\s*$/, '');
+  cleaned = cleaned.replace(/\n:+\s*\n/g, '\n');
+  cleaned = cleaned.replace(/\n:+\s*$/g, '\n');
 
   return cleaned.trim();
 }
@@ -173,7 +179,8 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
         });
 
         // Create an update artifact instead
-        const updateId = `${identifier}_update${matchCount - 1}_${attributes.type}_${attributes.title}`
+        const updateId =
+          `${identifier}_update${matchCount - 1}_${attributes.type}_${attributes.title}`
             .replace(/\s+/g, '_')
             .replace(/\//g, '-')
             .toLowerCase();
@@ -200,7 +207,7 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
 
         artifactMap.set(updateId, updateArtifact);
       } else {
-         // First time seeing this identifier - create base artifact
+        // First time seeing this identifier - create base artifact
         const artifact = {
           id,
           identifier,
@@ -218,7 +225,6 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
         artifactMap.set(identifier, artifact);
       }
 
-      // CRITICAL DEBUG: Log if we're replacing an existing artifact (streaming scenario)
       const wasReplaced = artifactMap.has(identifier);
       if (wasReplaced) {
         // console.log('🔄 [extractArtifacts] REPLACED existing artifact during streaming:', {
@@ -234,7 +240,6 @@ export function extractAllArtifactsFromMessage(messageText: string, messageId?: 
   const artifacts = Array.from(artifactMap.values());
   console.log(`🎯 [extractArtifacts] Total artifacts extracted: ${artifacts.length}`);
 
-  // CRITICAL: Log each artifact's content preview to detect duplication
   artifacts.forEach((art, idx) => {
     const contentLines = art.content?.split('\n') || [];
     const hasDuplication =

@@ -74,33 +74,36 @@ const Markdown = memo(({ content = '', isLatestMessage }: TContentProps) => {
 
   return (
     <MarkdownErrorBoundary content={content} codeExecution={true}>
-      <ArtifactProvider>
-        <CodeBlockProvider>
-          <ReactMarkdown
-            /** @ts-ignore */
-            remarkPlugins={remarkPlugins}
-            /* @ts-ignore */
-            rehypePlugins={rehypePlugins}
-            components={
-              {
-                code,
-                a,
-                p,
-                img,
-                artifact: Artifact,
-                artifactupdate: ArtifactUpdate,
-                citation: Citation,
-                'highlighted-text': HighlightedText,
-                'composite-citation': CompositeCitation,
-              } as {
-                [nodeType: string]: React.ElementType;
+      <ArtifactsProvider>
+        <ArtifactProvider>
+          <CodeBlockProvider>
+            <ReactMarkdown
+              /** @ts-ignore */
+              remarkPlugins={remarkPlugins}
+              /* @ts-ignore */
+              rehypePlugins={rehypePlugins}
+              components={
+                {
+                  code,
+                  a,
+                  p,
+                  img,
+                  artifact: Artifact,
+                  artifactupdate: ArtifactUpdate,
+                  selection: Selection,
+                  citation: Citation,
+                  'highlighted-text': HighlightedText,
+                  'composite-citation': CompositeCitation,
+                } as unknown as {
+                  [nodeType: string]: React.ElementType;
+                }
               }
-            }
-          >
-            {currentContent}
-          </ReactMarkdown>
-        </CodeBlockProvider>
-      </ArtifactProvider>
+            >
+              {currentContent}
+            </ReactMarkdown>
+          </CodeBlockProvider>
+        </ArtifactProvider>
+      </ArtifactsProvider>
     </MarkdownErrorBoundary>
   );
 });

@@ -4,8 +4,8 @@ import * as Tabs from '@radix-ui/react-tabs';
 import type { SandpackPreviewRef } from '@codesandbox/sandpack-react/unstyled';
 import type { CodeEditorRef } from '@codesandbox/sandpack-react';
 import type { Artifact } from '~/common';
-import { useEditorContext, useArtifactsContext } from '~/Providers';
-import { useChatContext } from '~/Providers';
+import { useCodeState } from '~/Providers/EditorContext';
+import { useArtifactsContext, useChatContext } from '~/Providers';
 import useArtifactProps from '~/hooks/Artifacts/useArtifactProps';
 import { useAutoScroll } from '~/hooks/Artifacts/useAutoScroll';
 import { ArtifactCodeEditor } from './ArtifactCodeEditor';
@@ -15,7 +15,6 @@ import { useRecoilState } from 'recoil';
 import { useSubmitMessage } from '~/hooks';
 import { artifactsState } from '~/store/artifacts';
 import { artifactCache } from './artifactCache';
-import { cn } from '~/utils';
 import {
   applyAllPartialUpdates,
   applyPartialUpdate,
@@ -34,7 +33,7 @@ export default function ArtifactTabs({
   isSharedConvo?: boolean;
 }) {
   const { isSubmitting } = useArtifactsContext();
-  const { currentCode, setCurrentCode } = useEditorContext();
+  const { currentCode, setCurrentCode } = useCodeState();
   const { data: startupConfig } = useGetStartupConfig();
   const { latestMessage: _latestMessage } = useChatContext();
   const [_artifacts, _setArtifacts] = useRecoilState(artifactsState);
@@ -290,12 +289,11 @@ export default function ArtifactTabs({
         );
       }
       if (originalArtifact && originalArtifact.content) {
-
         const mergedContent = applyAllPartialUpdates(
           originalArtifact.content,
           _artifacts,
           artifact.id,
-          false, 
+          false,
           null,
         );
         setCurrentCode(mergedContent);
@@ -309,8 +307,8 @@ export default function ArtifactTabs({
     // Only update if the artifact actually changed (not just currentCode)
     if (mergedArtifact?.id && mergedArtifact.id !== lastMergedIdRef.current) {
       if (mergedArtifact.content) {
-      setCurrentCode(mergedArtifact.content);
-    }
+        setCurrentCode(mergedArtifact.content);
+      }
       lastMergedIdRef.current = mergedArtifact.id;
     }
   }, [mergedArtifact, setCurrentCode, currentCode]);
@@ -380,24 +378,6 @@ When providing your updated code, use the artifactupdate directive format:
 \`\`\`
 :::
 
-❌ WRONG EXAMPLE (User asks "change background color to red"):
-:::artifactupdate{...}
-\`\`\`html
-<!DOCTYPE html>
-<html>
-<head>...</head>
-<body style="background: red;">...</body>
-</html>
-\`\`\`
-:::
-
-✅ CORRECT EXAMPLE (User asks "change background color to red"):
-:::artifactupdate{...}
-\`\`\`html
-<body style="background: red;">
-\`\`\`
-:::
-
 CRITICAL RULES (follow in this order):
 1. IDENTIFIER: Use ${artifact.identifier || artifact.id} exactly as-is
 2. SCOPE: Return ONLY the code section being changed, NEVER the full artifact OR ANY OTHER CODE. It is replacing the existing content in the artifact. ** NO EXTRA CODE!**
@@ -462,7 +442,6 @@ CRITICAL RULES (follow in this order):
           sharedProps={sharedProps}
           currentCode={currentCode}
           startupConfig={startupConfig}
-          isMermaid={isMermaid}
         />
       </Tabs.Content>
     </div>

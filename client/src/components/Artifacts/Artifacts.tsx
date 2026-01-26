@@ -11,6 +11,7 @@ import ArtifactVersion from './ArtifactVersion';
 import ArtifactTabs from './ArtifactTabs';
 import { CopyCodeButton } from './Code';
 import { useLocalize } from '~/hooks';
+import { cn } from '~/utils';
 import store from '~/store';
 
 const MAX_BLUR_AMOUNT = 32;
@@ -81,7 +82,6 @@ export default function Artifacts() {
 
   const {
     activeTab,
-    isMermaid,
     setActiveTab,
     currentIndex,
     currentArtifact,

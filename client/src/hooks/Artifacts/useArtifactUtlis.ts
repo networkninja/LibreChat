@@ -59,8 +59,8 @@ export function applyPartialUpdate(
   const normalizeForComparison = (text: string): string => {
     let normalized = text;
 
-    normalized = normalized.replace(/\\"/g, '"');  // \" → "
-    normalized = normalized.replace(/\\'/g, "'");  // \' → '
+    normalized = normalized.replace(/\\"/g, '"'); // \" → "
+    normalized = normalized.replace(/\\'/g, "'"); // \' → '
     normalized = normalized.replace(/\\\\/g, '\\'); // \\\\ → \\
 
     normalized = normalized.replace(/\\n/g, '\n');
@@ -632,16 +632,6 @@ export function applyPartialUpdate(
                 // If scores are equal, prefer closer to target line
                 return Math.abs(a.line - startLine) - Math.abs(b.line - startLine);
               })[0];
-
-              console.log('✅ [DISAMBIGUATION - CONTEXT SCORE] Picked best match by context:', {
-                foundAtLine: bestMatch.line,
-                contextScore: bestMatch.context.contextScore,
-                elementType: bestMatch.context.elementType,
-                hasId: bestMatch.context.hasId,
-                hasOnClick: bestMatch.context.hasOnClick,
-                PROCEEDING: 'Using highest context score match',
-              });
-
               // Update coordinates
               cachedSelection = {
                 ...cachedSelection,
@@ -1015,7 +1005,7 @@ export function applyPartialUpdate(
                 endColumn: exactMatch + originalText.length,
                 matchType: 'EXACT',
               };
-              }
+            }
             // Only apply fuzzy matching for strings >= 15 characters
             if (originalText.trim().length < 15) {
               return { found: false };
@@ -1121,7 +1111,7 @@ export function applyPartialUpdate(
                 );
                 let matchCount = 0;
                 for (const origClass of normalizedOrigClasses) {
-                if (
+                  if (
                     normalizedLineClasses.some(
                       (lc) => lc.includes(origClass) || origClass.includes(lc),
                     )
@@ -1349,7 +1339,7 @@ export function applyPartialUpdate(
                     },
                   );
                   break;
-              }
+                }
 
                 // FUZZY MATCH 2 for multi-line: Normalize and compare
                 const normalizedOriginalFirstLine = normalizeForComparison(originalFirstLine);
@@ -1682,8 +1672,6 @@ export function applyPartialUpdate(
         before = '';
       }
 
-      // ADDITIONAL CHECK: If 'before' contains significant code (not just whitespace/punctuation)
-      // and the first update line also contains that code, we're likely about to duplicate
       const beforeCode = before.replace(/[\s{[(]/g, '').substring(0, 20); // Extract meaningful chars
       if (beforeCode.length > 5 && firstUpdateLineTrimmed.includes(beforeCode)) {
         console.error('🚨 DUPLICATE CODE PATTERN DETECTED!', {
@@ -1757,7 +1745,6 @@ export function applyPartialUpdate(
 
     return sanitizedResult;
   } else {
-
     const lineAtStart = lines[finalStartLine] || '';
     const textAtCoordinates =
       finalStartLine === finalEndLine
@@ -1804,8 +1791,8 @@ export function applyPartialUpdate(
     if (shouldReplaceFullLines) {
       // FULL LINE REPLACEMENT - ignore column coordinates entirely
       console.log('✅ [FULL LINE MODE] Replacing complete lines - ignoring column coordinates');
-      beforeStart = ''; // No partial line at start
-      afterEnd = ''; // No partial line at end
+      beforeStart = '';
+      afterEnd = '';
       before = lines.slice(0, finalStartLine);
       after = lines.slice(finalEndLine + 1);
     } else {
@@ -2147,9 +2134,6 @@ export function applyAllPartialUpdates(
   }
   // Don't try to split it - just use it directly
   const targetBaseIdentifier = targetArtifact?.identifier;
-
-  // If viewing BASE artifact (not an update), targetIndex = -1 (no updates applied)
-  // If viewing UPDATE artifact, targetIndex = that update's index (apply updates 0 through targetIndex)
   const targetIndex = targetArtifact?.isUpdate
     ? (targetArtifact.index ??
       parseInt(targetArtifact.id?.match(/_update(\d+)_/)?.[1] || '999', 10))

@@ -14,9 +14,9 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
   const setVisible = useSetRecoilState(store.artifactsVisibility);
   const [artifacts, setArtifacts] = useRecoilState(store.artifactsState);
   const [currentArtifactId, setCurrentArtifactId] = useRecoilState(store.currentArtifactId);
-  const resetCurrentArtifactId = useResetRecoilState(store.currentArtifactId);
   const isSelected = artifact?.id === currentArtifactId;
   const [visibleArtifacts, setVisibleArtifacts] = useRecoilState(store.visibleArtifacts);
+  const resetCurrentArtifactId = useResetRecoilState(store.currentArtifactId);
 
   // Get current conversation ID from URL
   const currentConversationId = location.pathname.match(/\/c\/([^/]+)/)?.[1] || null;
@@ -61,47 +61,32 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
     <div className="group relative my-4 rounded-xl text-sm text-text-primary">
       {(() => {
         const handleClick = () => {
+          if (!location.pathname.includes('/c/')) return;
+
           if (isSelected) {
             resetCurrentArtifactId();
             setVisible(false);
             return;
           }
-          console.log('[ArtifactButton] Clicked:', { id: artifact.id, title: artifact.title });
 
-          // CRITICAL: Check if this artifact belongs to the current conversation
-          // Strategy 1: Check if artifact exists in state
-          const artifactExistsInState = _artifacts?.[artifact.id] != null;
-          // Strategy 2: Check conversationId match (if available)
-          const conversationIdMatches =
-            !artifact.conversationId || // No conversationId set (legacy artifacts)
-            !currentConversationId || // No current conversation (edge case)
-            artifact.conversationId === currentConversationId;
+          console.log('[ArtifactButton] Selecting artifact:', {
+            id: artifact.id,
+            title: artifact.title,
+            artifactExists: !!artifacts?.[artifact.id],
+          });
 
-          // CRITICAL FIX: If artifact exists in visibleArtifacts but not in state,
-          // it might just be a timing issue. Add it to state instead of blocking.
-          if (!artifactExistsInState) {
-            console.warn('⚠️ [ArtifactButton] Artifact not in state - checking conversationId:', {
-              artifactId: artifact.id,
-              artifactConversationId: artifact.conversationId,
-              currentConversationId,
-              artifactInState: !!_artifacts?.[artifact.id],
-              message:
-                'This artifact belongs to a different conversation. Switch to that conversation to view it.',
-            });
-            // Don't open the artifact - it's not in the current conversation's state
-            return;
+          // Add artifact to state if missing
+          if (artifacts?.[artifact.id] == null) {
+            console.log('[ArtifactButton] Adding artifact to state:', artifact.id);
+            setArtifacts((prev) => ({
+              ...prev,
+              [artifact.id]: artifact,
+            }));
           }
 
+          // Set as current artifact and open panel
           setCurrentArtifactId(artifact.id);
           setVisible(true);
-
-          if (artifacts?.[artifact.id] == null) {
-            setArtifacts(visibleArtifacts);
-          }
-
-          setTimeout(() => {
-            setCurrentArtifactId(artifact.id);
-          }, 15);
         };
 
         const buttonClass = cn(

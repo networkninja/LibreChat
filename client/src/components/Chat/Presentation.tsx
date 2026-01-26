@@ -101,18 +101,6 @@ export default function Presentation({ children }: { children: React.ReactNode }
     return typeof collapsedPanels === 'string' ? JSON.parse(collapsedPanels) : true;
   }, []);
   const fullCollapse = useMemo(() => localStorage.getItem('fullPanelCollapse') === 'true', []);
-
-  /**
-   * Memoize artifacts JSX to prevent recreating it on every render
-   * This is critical for performance - prevents entire artifact tree from re-rendering
-   * CRITICAL FIX: Removed length check - always render if visibility is true
-   * This allows artifacts to load from localStorage even if state is initially empty
-   *
-   * IMPORTANT: For new conversations (/c/new), never show artifacts
-   * even if visibility state hasn't been reset yet
-   *
-   * SAFETY CHECK: Only render if there are actual artifacts to display
-   */
   const artifactsElement = useMemo(() => {
     const conversationId = location.pathname.match(/\/c\/([^/]+)/)?.[1] || null;
     const isNewConversation = conversationId === 'new';
@@ -148,7 +136,6 @@ export default function Presentation({ children }: { children: React.ReactNode }
           defaultLayout={defaultLayout}
           fullPanelCollapse={fullCollapse}
           defaultCollapsed={defaultCollapsed}
-          artifacts={artifactsElement}
           artifacts={artifactsElement}
         >
           <main className="flex h-full flex-col overflow-y-auto" role="main">

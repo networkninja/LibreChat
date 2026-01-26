@@ -37,14 +37,14 @@ export default function useArtifacts() {
   // This ensures selection contexts are available when artifacts are merged
   useEffect(() => {
     const loadCache = async () => {
-    artifactCache.init();
+      artifactCache.init();
 
-    // Load conversation cache from database on page refresh
-    if (conversationId && conversationId !== Constants.NEW_CONVO) {
-      console.log(
-        '🔄 [useArtifacts] Loading conversation cache from database for:',
-        conversationId,
-      );
+      // Load conversation cache from database on page refresh
+      if (conversationId && conversationId !== Constants.NEW_CONVO) {
+        console.log(
+          '🔄 [useArtifacts] Loading conversation cache from database for:',
+          conversationId,
+        );
         try {
           await artifactCache.loadConversationCache(conversationId);
           console.log(
@@ -121,87 +121,6 @@ export default function useArtifacts() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, cacheLoaded]); // CRITICAL: Also depend on cacheLoaded!
-
-  // CRITICAL: Hydrate artifacts with cached content on initial load/refresh
-  useEffect(() => {
-    if (!artifacts || Object.keys(artifacts).length === 0) {
-      return;
-    }
-
-    // Check if any artifact has cached content that should be applied
-    let hasUpdates = false;
-    const updatedArtifacts = { ...artifacts };
-
-    Object.keys(artifacts).forEach((artifactId) => {
-      const artifact = artifacts[artifactId];
-      if (!artifact) return;
-
-      const cachedContent = artifactCache.getContent(artifactId);
-
-      if (cachedContent && cachedContent.content !== artifact.content) {
-        console.log('💾 [useArtifacts] Hydrating artifact from cache:', {
-          artifactId,
-          cachedLength: cachedContent.content.length,
-          currentLength: artifact.content?.length,
-        });
-
-        updatedArtifacts[artifactId] = {
-          ...artifact,
-          id: artifact.id || artifactId,
-          content: cachedContent.content,
-        };
-        hasUpdates = true;
-      }
-    });
-
-    if (hasUpdates) {
-      console.log('✅ [useArtifacts] Applying cached content to artifacts');
-      setArtifacts(updatedArtifacts);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId]); // Only run on conversationId change (initial load/refresh)
-
-  // CRITICAL: Hydrate artifacts with cached content on initial load/refresh
-  useEffect(() => {
-    if (!artifacts || Object.keys(artifacts).length === 0) {
-      return;
-    }
-
-    console.log('🔄 [useArtifacts] Checking for cached content to hydrate artifacts');
-    
-    // Check if any artifact has cached content that should be applied
-    let hasUpdates = false;
-    const updatedArtifacts = { ...artifacts };
-
-    Object.keys(artifacts).forEach((artifactId) => {
-      const artifact = artifacts[artifactId];
-      if (!artifact) return;
-      
-      const cachedContent = artifactCache.getContent(artifactId);
-      
-      if (cachedContent && cachedContent.content !== artifact.content) {
-        console.log('💾 [useArtifacts] Hydrating BASE artifact from cache:', {
-          artifactId,
-          isUpdate: artifact.isUpdate,
-          cachedLength: cachedContent.content.length,
-          currentLength: artifact.content?.length,
-        });
-        
-        updatedArtifacts[artifactId] = {
-          ...artifact,
-          id: artifact.id || artifactId,
-          content: cachedContent.content,
-        };
-        hasUpdates = true;
-      }
-    });
-
-    if (hasUpdates) {
-      console.log('✅ [useArtifacts] Applying cached content to artifacts');
-      setArtifacts(updatedArtifacts);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId, cacheLoaded]);
 
   const orderedArtifactIds = useMemo(() => {
     console.log('artifacts in order', artifacts);
@@ -364,17 +283,8 @@ export default function useArtifacts() {
       // Only trigger refresh once per artifact to prevent infinite loop
       if (!refreshedArtifactsRef.current.has(currentArtifactId)) {
         refreshedArtifactsRef.current.add(currentArtifactId);
-      setRefreshTrigger((prev) => prev + 1);
+        setRefreshTrigger((prev) => prev + 1);
       }
-    }
-  }, [currentArtifactId, artifacts, setRefreshTrigger]);
-
-  // When switching to an artifactupdate, always trigger a refresh to ensure merge
-  useEffect(() => {
-    if (!currentArtifactId) return;
-    const current = artifacts?.[currentArtifactId];
-    if (current && current.type === 'artifactupdate') {
-      setRefreshTrigger((prev) => prev + 1);
     }
   }, [currentArtifactId, artifacts, setRefreshTrigger]);
 
@@ -402,7 +312,6 @@ export default function useArtifacts() {
 
     if (!currentArtifactId) {
       setCurrentArtifactId(latestArtifactId);
-    } else {
     }
     lastContentRef.current = latestArtifact?.content ?? null;
 
@@ -548,7 +457,6 @@ export default function useArtifacts() {
 
   return {
     activeTab,
-    isMermaid,
     setActiveTab,
     currentIndex,
     currentArtifact: currentDisplayArtifact, // Use the display artifact everywhere
