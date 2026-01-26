@@ -2,7 +2,9 @@ import React, { useMemo } from 'react';
 import { useRecoilValue } from 'recoil';
 import { OGDialog, OGDialogTemplate } from '@librechat/client';
 import {
+  inferMimeType,
   EToolResources,
+  EModelEndpoint,
   defaultAgentCapabilities,
   isDocumentSupportedProvider,
 } from 'librechat-data-provider';
@@ -55,13 +57,32 @@ const DragDropModal = ({ onOptionSelect, setShowModal, files, isVisible }: DragD
     const _options: FileOption[] = [];
     const currentProvider = provider || endpoint;
 
+    /** Helper to get inferred MIME type for a file */
+    const getFileType = (file: File) => inferMimeType(file.name, file.type);
+
     // Check if provider supports document upload
-    if (isDocumentSupportedProvider(endpointType || currentProvider)) {
+    if (isDocumentSupportedProvider(endpointType) || isDocumentSupportedProvider(currentProvider)) {
+      const isGoogleProvider = currentProvider === EModelEndpoint.google;
+      const validFileTypes = isGoogleProvider
+        ? files.every((file) => {
+            const type = getFileType(file);
+            return (
+              type?.startsWith('image/') ||
+              type?.startsWith('video/') ||
+              type?.startsWith('audio/') ||
+              type === 'application/pdf'
+            );
+          })
+        : files.every((file) => {
+            const type = getFileType(file);
+            return type?.startsWith('image/') || type === 'application/pdf';
+          });
+
       _options.push({
         label: localize('com_ui_upload_provider'),
         value: undefined,
         icon: <FileImageIcon className="icon-md" />,
-        condition: true, // Allow for both images and documents
+        condition: validFileTypes,
       });
     } else {
       // Only show image upload option if all files are images and provider doesn't support documents
@@ -69,7 +90,7 @@ const DragDropModal = ({ onOptionSelect, setShowModal, files, isVisible }: DragD
         label: localize('com_ui_upload_image_input'),
         value: undefined,
         icon: <ImageUpIcon className="icon-md" />,
-        condition: files.every((file) => file.type?.startsWith('image/')),
+        condition: files.every((file) => getFileType(file)?.startsWith('image/')),
       });
     }
     if (capabilities.fileSearchEnabled && fileSearchAllowedByAgent) {
