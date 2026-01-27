@@ -1,6 +1,10 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import React from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
+import React from 'react';
 import * as Tabs from '@radix-ui/react-tabs';
+import type { SandpackPreviewRef } from '@codesandbox/sandpack-react/unstyled';
+import type { CodeEditorRef } from '@codesandbox/sandpack-react';
 import type { SandpackPreviewRef } from '@codesandbox/sandpack-react/unstyled';
 import type { CodeEditorRef } from '@codesandbox/sandpack-react';
 import type { Artifact } from '~/common';
@@ -23,13 +27,17 @@ import {
 
 export default function ArtifactTabs({
   artifact,
+  isMermaid,
   editorRef,
   previewRef,
   isSharedConvo,
+  isSharedConvo,
 }: {
   artifact: Artifact;
+  isMermaid: boolean;
   editorRef: React.MutableRefObject<CodeEditorRef>;
   previewRef: React.MutableRefObject<SandpackPreviewRef>;
+  isSharedConvo?: boolean;
   isSharedConvo?: boolean;
 }) {
   const { isSubmitting } = useArtifactsContext();
@@ -241,9 +249,29 @@ export default function ArtifactTabs({
     [cacheInitialized],
   );
 
+  const [cacheInitialized, setCacheInitialized] = useState(false);
+
+  const initializeCache = useCallback(
+    async (artifactId: string) => {
+      if (artifactId && !cacheInitialized) {
+        try {
+          // Load artifact-specific cache from database
+          await artifactCache.initWithDatabase(artifactId);
+          await artifactCache._loadFromDatabase(artifactId);
+          setCacheInitialized(true);
+        } catch (error) {
+          console.error('❌ [ArtifactTabs] Failed to initialize cache:', error);
+          setCacheInitialized(true);
+        }
+      }
+    },
+    [cacheInitialized],
+  );
+
   useEffect(() => {
     if (artifact.id !== lastIdRef.current) {
       setCurrentCode(undefined);
+      initializeCache(artifact.id);
       initializeCache(artifact.id);
     }
     lastIdRef.current = artifact.id;
@@ -412,6 +440,60 @@ CRITICAL RULES (follow in this order):
     }
   }, [artifact.id]);
 
+
+  // Helper function to get language from artifact type
+  const getLanguageFromType = (type?: string): string => {
+    if (type === 'code/javascript') return 'javascript';
+    if (type === 'text/html') return 'html';
+    return 'text';
+  };
+
+  // Handle selection submissions from the CodeEditor component
+  const handleSelectionSubmit = useCallback(
+    (messageData: any) => {
+      const systemInstructions = `You are helping edit code in an artifact. 
+When providing your updated code, use the artifactupdate directive format:
+
+:::artifactupdate{identifier="${artifact.identifier}" type="${artifact.type || 'text/html'}" title="${artifact.title || 'Updated Artifact'}"}
+\`\`\`${getLanguageFromType(artifact.type)}
+[your updated code here]
+\`\`\`
+:::
+
+CRITICAL RULES (follow in this order):
+1. IDENTIFIER: Use ${artifact.identifier || artifact.id} exactly as-is
+2. SCOPE: Return ONLY the code section being changed, NEVER the full artifact OR ANY OTHER CODE. It is replacing the existing content in the artifact. ** NO EXTRA CODE!**
+3. CONTEXT: Read entire previous artifact to understand change location, then output only updates
+4. NO EXPLANATIONS: Zero preamble text before ::artifactupdate marker
+5. PRESERVE FORMATTING: Match original spacing, indentation, line breaks exactly
+6. NO DUPLICATION: Only include code being modified; never repeat existing unchanged code
+7. INSERTION READY: Format output so it's directly replaceable at the specified location
+8. ASSUME YES: Make decisions without asking user confirmation
+9. VALIDATION: Ensure updates align logically with user request and artifact type
+`;
+
+      submitMessage({
+        text: messageData.message,
+        artifactInfo: {
+          artifactId: artifact.id,
+          artifactType: artifact.type ?? '',
+        },
+        systemInstructions,
+      });
+    },
+    [artifact, submitMessage],
+  );
+
+  // --- Auto-select preview tab when artifact changes ---
+  const [_tabValue, setTabValue] = useState('preview');
+  const hasInitialized = useRef(false);
+  useEffect(() => {
+    if (!hasInitialized.current && artifact.id) {
+      setTabValue('preview');
+      hasInitialized.current = true;
+    }
+  }, [artifact.id]);
+
   return (
     <div className="flex h-full w-full flex-col">
       <Tabs.Content
@@ -442,6 +524,7 @@ CRITICAL RULES (follow in this order):
           sharedProps={sharedProps}
           currentCode={currentCode}
           startupConfig={startupConfig}
+          isMermaid={isMermaid}
         />
       </Tabs.Content>
     </div>

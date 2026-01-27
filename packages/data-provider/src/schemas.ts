@@ -380,6 +380,7 @@ export const anthropicSettings = {
     default: DEFAULT_MAX_OUTPUT,
     reset: (modelName: string) => {
       if (/claude-[3-4][-.][057]-sonnet/.test(modelName)) {
+      if (/claude-[3-4][-.][057]-sonnet/.test(modelName)) {
         return DEFAULT_MAX_OUTPUT;
       }
 
@@ -669,6 +670,7 @@ export type TMessage = z.input<typeof tMessageSchema> & {
   attachments?: TAttachment[];
   clientTimestamp?: string;
   feedback?: TFeedback;
+  extraSystemInstructions?: string;
   extraSystemInstructions?: string;
 };
 

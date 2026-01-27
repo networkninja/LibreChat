@@ -828,6 +828,8 @@ export const ArtifactCodeEditor = function ({
   sharedProps,
   onSelectionSubmit,
   readOnly: externalReadOnly,
+  onSelectionSubmit,
+  readOnly: externalReadOnly,
 }: {
   fileKey: string;
   artifact: Artifact;
@@ -835,6 +837,8 @@ export const ArtifactCodeEditor = function ({
   template: SandpackProviderProps['template'];
   sharedProps: Partial<SandpackProviderProps>;
   editorRef: React.MutableRefObject<CodeEditorRef>;
+  onSelectionSubmit?: (message: any) => void;
+  readOnly?: boolean;
   onSelectionSubmit?: (message: any) => void;
   readOnly?: boolean;
 }) {
@@ -852,7 +856,11 @@ export const ArtifactCodeEditor = function ({
   }, [config, template, fileKey]);
   const initialReadOnly = (externalReadOnly ?? false) || (isSubmitting ?? false);
   const [readOnly, setReadOnly] = useState(initialReadOnly);
+  const initialReadOnly = (externalReadOnly ?? false) || (isSubmitting ?? false);
+  const [readOnly, setReadOnly] = useState(initialReadOnly);
   useEffect(() => {
+    setReadOnly((externalReadOnly ?? false) || (isSubmitting ?? false));
+  }, [isSubmitting, externalReadOnly]);
     setReadOnly((externalReadOnly ?? false) || (isSubmitting ?? false));
   }, [isSubmitting, externalReadOnly]);
 
@@ -879,9 +887,19 @@ export const ArtifactCodeEditor = function ({
         readOnly={readOnly}
         onSelectionSubmit={onSelectionSubmit}
       />
+      <CodeEditor
+        fileKey={fileKey}
+        artifact={artifact}
+        editorRef={editorRef}
+        readOnly={readOnly}
+        onSelectionSubmit={onSelectionSubmit}
+      />
     </StyledProvider>
   );
 };
+
+// Export the centralized artifact cache
+export { artifactCache } from './artifactCache';
 
 // Export the centralized artifact cache
 export { artifactCache } from './artifactCache';

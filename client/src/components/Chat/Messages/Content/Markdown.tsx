@@ -16,6 +16,13 @@ import {
   Selection,
 } from '~/components/Artifacts/Artifact';
 import { ArtifactProvider, ArtifactsProvider, CodeBlockProvider } from '~/Providers';
+import {
+  Artifact,
+  ArtifactUpdate,
+  artifactPlugin,
+  Selection,
+} from '~/components/Artifacts/Artifact';
+import { ArtifactProvider, ArtifactsProvider, CodeBlockProvider } from '~/Providers';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { langSubset, preprocessLaTeX } from '~/utils';
 import { unicodeCitation } from '~/components/Web';

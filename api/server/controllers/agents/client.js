@@ -906,12 +906,53 @@ class AgentClient extends BaseClient {
           config.recursionLimit = agentsEConfig?.maxRecursionLimit;
         }
 
-        // TODO: needs to be added as part of AgentContext initialization
-        // const noSystemModelRegex = [/\b(o1-preview|o1-mini|amazon\.titan-text)\b/gi];
-        // const noSystemMessages = noSystemModelRegex.some((regex) =>
-        //   agent.model_parameters.model.match(regex),
-        // );
-        // if (noSystemMessages === true && systemContent?.length) {
+        // Extract extraSystemInstructions for artifact handling
+        const extraSystemInstructions = this.options.req.body.extraSystemInstructions;
+
+        const systemMessage = Object.values(agents.toolContextMap ?? {})
+          .join('\n')
+          .trim();
+
+        // CRITICAL: Preserve existing instructions from buildMessages (includes RAG context)
+        const existingInstructions = agents[0].instructions || '';
+
+        console.log('📋 BEFORE setting instructions:', {
+          hasExistingInstructions: !!existingInstructions,
+          existingLength: existingInstructions?.length,
+          agentsArrayLength: agents?.length,
+          agent0Id: agents[0]?.id,
+        });
+
+        let systemContent = [
+          existingInstructions,
+          systemMessage,
+          mcpPromptData ?? '',
+          extraSystemInstructions ?? '',
+        ]
+          .filter(Boolean)
+          .join('\n')
+          .trim();
+        agents[0].instructions = systemContent;
+
+        console.log('📋 AFTER setting instructions:', {
+          hasInstructions: !!agents[0].instructions,
+          instructionsLength: agents[0].instructions?.length,
+          hasExistingInstructions: !!existingInstructions,
+          existingLength: existingInstructions?.length,
+          firstCharsOfInstructions: agents[0].instructions?.substring(0, 150),
+        });
+        // const promotSet = new Set((this.options.agent.prompt ?? []).map((tool) => tool && tool.name));
+        //   console.log("systemContent client.js", systemMessage, systemContent, mcpPromptData);
+
+        // if (effectiveNoSystemMessages === true) {
+        //   agent.instructions = undefined;
+        //   agent.additional_instructions = undefined;
+        // } else {
+        //   agent.instructions = systemContent;
+        //   agent.additional_instructions = undefined;
+        // }
+
+        // if (effectiveNoSystemMessages === true && systemContent?.length) {
         //   const latestMessageContent = _messages.pop().content;
         //   if (typeof latestMessageContent !== 'string') {
         //     latestMessageContent[0].text = [systemContent, latestMessageContent[0].text].join('\n');
@@ -925,15 +966,28 @@ class AgentClient extends BaseClient {
         // if (agent.useLegacyContent === true) {
         //   messages = formatContentStrings(messages);
         // }
+        // console.log("agent.model_parameters?.clientOptions", agent.model_parameters);
         // if (
         //   agent.model_parameters?.clientOptions?.defaultHeaders?.['anthropic-beta']?.includes(
         //     'prompt-caching',
-        //   )
+        //   ) ||
+        //   agent.model_parameters?.promptCache == true
         // ) {
         //   messages = addCacheControl(messages);
         // }
 
-        memoryPromise = this.runMemory(messages);
+          memoryPromise = this.runMemory(messages);
+        }
+
+        /** Resolve request-based headers for Custom Endpoints. Note: if this is added to
+         *  non-custom endpoints, needs consideration of varying provider header configs.
+         */
+        if (agent.model_parameters?.configuration?.defaultHeaders != null) {
+          agent.model_parameters.configuration.defaultHeaders = resolveHeaders({
+            headers: agent.model_parameters.configuration.defaultHeaders,
+            body: config.configurable.requestBody,
+          });
+        }
 
         run = await createRun({
           agents,
