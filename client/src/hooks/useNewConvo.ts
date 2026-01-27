@@ -78,6 +78,8 @@ const useNewConvo = (index = 0) => {
         const modelsConfig = modelsData ?? modelsQuery.data;
         const { endpoint = null } = conversation;
         const buildDefaultConversation = (endpoint === null || buildDefault) ?? false;
+        const useDefaultLastModel = startupConfig?.interface?.defaultLastModel ?? false;
+
         const activePreset =
           // use default preset only when it's defined,
           // preset is not provided,
@@ -95,10 +97,9 @@ const useNewConvo = (index = 0) => {
           (activePreset?.presetId != null &&
             activePreset.presetId &&
             activePreset.presetId === defaultPreset?.presetId);
-
         if (buildDefaultConversation) {
           let defaultEndpoint = getDefaultEndpoint({
-            convoSetup: activePreset ?? conversation,
+            convoSetup: useDefaultLastModel ? conversation : (activePreset ?? conversation),
             endpointsConfig,
           });
 
@@ -149,11 +150,25 @@ const useNewConvo = (index = 0) => {
           }
 
           const models = modelsConfig?.[defaultEndpoint] ?? [];
+          const defaultModelSpec = getDefaultModelSpec(startupConfig);
+
+          // CRITICAL: When useDefaultLastModel is true, use the default model spec
+          // When false, use the active preset (which could be null, allowing fallback to localStorage)
+          let lastConversationSetup: TConversation | null = null;
+
+          if (!useDefaultLastModel && activePreset) {
+            // Use active preset when useDefaultLastModel is false
+            lastConversationSetup = activePreset as TConversation;
+          } else {
+            // Pass null to allow fallback to localStorage's lastSelectedModel
+            lastConversationSetup = null;
+          }
           conversation = buildDefaultConvo({
             conversation,
             lastConversationSetup: activePreset as TConversation,
             endpoint: defaultEndpoint,
             models,
+            index,
           });
         }
 

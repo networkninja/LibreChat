@@ -47,6 +47,7 @@ export async function loadDefaultInterface({
     memories: shouldDisableMemories ? false : interfaceConfig?.memories,
     prompts: interfaceConfig?.prompts,
     multiConvo: interfaceConfig?.multiConvo,
+    defaultLastModel: interfaceConfig?.defaultLastModel,
     agents: interfaceConfig?.agents,
     temporaryChat: interfaceConfig?.temporaryChat,
     runCode: interfaceConfig?.runCode,

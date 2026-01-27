@@ -11,6 +11,7 @@ import {
   webSearchPermissionsSchema,
   fileSearchPermissionsSchema,
   multiConvoPermissionsSchema,
+  defaultLastModelPermissionsSchema,
   temporaryChatPermissionsSchema,
   peoplePickerPermissionsSchema,
   fileCitationsPermissionsSchema,
@@ -64,6 +65,9 @@ const defaultRolesSchema = z.object({
         // [Permissions.SHARE]: z.boolean().default(true),
       }),
       [PermissionTypes.MULTI_CONVO]: multiConvoPermissionsSchema.extend({
+        [Permissions.USE]: z.boolean().default(true),
+      }),
+      [PermissionTypes.DEFAULT_LAST_MODEL]: defaultLastModelPermissionsSchema.extend({
         [Permissions.USE]: z.boolean().default(true),
       }),
       [PermissionTypes.TEMPORARY_CHAT]: temporaryChatPermissionsSchema.extend({
@@ -124,6 +128,9 @@ export const roleDefaults = defaultRolesSchema.parse({
       [PermissionTypes.MULTI_CONVO]: {
         [Permissions.USE]: true,
       },
+      [PermissionTypes.DEFAULT_LAST_MODEL]: {
+        [Permissions.USE]: true,
+      },
       [PermissionTypes.TEMPORARY_CHAT]: {
         [Permissions.USE]: true,
       },
@@ -157,6 +164,7 @@ export const roleDefaults = defaultRolesSchema.parse({
       [PermissionTypes.MEMORIES]: {},
       [PermissionTypes.AGENTS]: {},
       [PermissionTypes.MULTI_CONVO]: {},
+      [PermissionTypes.DEFAULT_LAST_MODEL]: {},
       [PermissionTypes.TEMPORARY_CHAT]: {},
       [PermissionTypes.RUN_CODE]: {},
       [PermissionTypes.WEB_SEARCH]: {},
