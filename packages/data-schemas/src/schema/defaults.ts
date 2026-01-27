@@ -79,7 +79,7 @@ export const conversationPreset = {
     type: Boolean,
   },
   thinking: {
-    type: Schema.Types.Mixed,
+    type: Boolean,
   },
   thinkingBudget: {
     type: Number,
