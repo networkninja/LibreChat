@@ -28,6 +28,9 @@ export interface IRole extends Document {
     [PermissionTypes.MULTI_CONVO]?: {
       [Permissions.USE]?: boolean;
     };
+    [PermissionTypes.DEFAULT_LAST_MODEL]?: {
+      [Permissions.USE]?: boolean;
+    };
     [PermissionTypes.TEMPORARY_CHAT]?: {
       [Permissions.USE]?: boolean;
     };

@@ -1,21 +1,14 @@
 import React, { createContext, useContext, useMemo, useEffect } from 'react';
 import { useRecoilState } from 'recoil';
-import React, { createContext, useContext, useMemo, useEffect } from 'react';
-import { useRecoilState } from 'recoil';
 import type { TMessage } from 'librechat-data-provider';
 import { useChatContext } from './ChatContext';
 import { getLatestText } from '~/utils';
 import { extractAllArtifactsFromMessage } from '~/utils/extractArtifacts';
 import { artifactsState } from '~/store/artifacts';
 import store from '~/store';
-import { extractAllArtifactsFromMessage } from '~/utils/extractArtifacts';
-import { artifactsState } from '~/store/artifacts';
-import store from '~/store';
 
 export interface ArtifactsContextValue {
-export interface ArtifactsContextValue {
   isSubmitting: boolean;
-  isStreaming: boolean;
   isStreaming: boolean;
   latestMessageId: string | null;
   latestMessageText: string;
@@ -24,12 +17,6 @@ export interface ArtifactsContextValue {
 
 const ArtifactsContext = createContext<ArtifactsContextValue | undefined>(undefined);
 
-interface ArtifactsProviderProps {
-  children: React.ReactNode;
-  value?: Partial<ArtifactsContextValue>;
-}
-
-export function ArtifactsProvider({ children, value }: ArtifactsProviderProps) {
 interface ArtifactsProviderProps {
   children: React.ReactNode;
   value?: Partial<ArtifactsContextValue>;
@@ -134,23 +121,8 @@ export function ArtifactsProvider({ children, value }: ArtifactsProviderProps) {
       isSubmitting,
       isStreaming: isStreamingValue,
       latestMessageText: chatLatestMessageText,
-      isStreaming: isStreamingValue,
-      latestMessageText: chatLatestMessageText,
       latestMessageId: latestMessage?.messageId ?? null,
       conversationId: conversation?.conversationId ?? null,
-    };
-  }, [
-    isSubmitting,
-    latestMessage?.unfinished,
-    chatLatestMessageText,
-    latestMessage?.messageId,
-    conversation?.conversationId,
-  ]);
-
-  /** Context value only created when relevant values change */
-  const contextValue = useMemo<ArtifactsContextValue>(
-    () => (value ? { ...defaultContextValue, ...value } : defaultContextValue),
-    [defaultContextValue, value],
     };
   }, [
     isSubmitting,
@@ -172,16 +144,6 @@ export function ArtifactsProvider({ children, value }: ArtifactsProviderProps) {
 export function useArtifactsContext() {
   const context = useContext(ArtifactsContext);
   if (!context) {
-    // Return a safe default instead of throwing
-    // This allows the component to work in contexts where the provider isn't available
-    console.warn('⚠️ useArtifactsContext called without ArtifactsProvider - using defaults');
-    return {
-      isSubmitting: false,
-      isStreaming: false,
-      latestMessageId: null,
-      latestMessageText: '',
-      conversationId: null,
-    };
     // Return a safe default instead of throwing
     // This allows the component to work in contexts where the provider isn't available
     console.warn('⚠️ useArtifactsContext called without ArtifactsProvider - using defaults');

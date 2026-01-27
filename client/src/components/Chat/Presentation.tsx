@@ -101,33 +101,6 @@ export default function Presentation({ children }: { children: React.ReactNode }
     return typeof collapsedPanels === 'string' ? JSON.parse(collapsedPanels) : true;
   }, []);
   const fullCollapse = useMemo(() => localStorage.getItem('fullPanelCollapse') === 'true', []);
-  const artifactsElement = useMemo(() => {
-    const conversationId = location.pathname.match(/\/c\/([^/]+)/)?.[1] || null;
-    const isNewConversation = conversationId === 'new';
-    const hasArtifacts = artifacts && Object.keys(artifacts).length > 0;
-
-    console.log('🎨 [Presentation] Rendering artifacts element:', {
-      conversationId,
-      isNewConversation,
-      artifactsVisibility,
-      artifactsCount: Object.keys(artifacts ?? {}).length,
-      artifactKeys: Object.keys(artifacts ?? {}),
-      hasArtifacts,
-      willRender: artifactsVisibility === true && hasArtifacts,
-    });
-
-    // SAFETY: Only show panel if visibility is true AND there are actual artifacts
-    if (artifactsVisibility === true && hasArtifacts) {
-      return (
-        <ArtifactsProvider>
-          <EditorProvider>
-            <Artifacts />
-          </EditorProvider>
-        </ArtifactsProvider>
-      );
-    }
-    return null;
-  }, [artifactsVisibility, artifacts, location.pathname]);
 
   /**
    * Memoize artifacts JSX to prevent recreating it on every render
@@ -138,7 +111,6 @@ export default function Presentation({ children }: { children: React.ReactNode }
    * IMPORTANT: For new conversations (/c/new), never show artifacts
    * even if visibility state hasn't been reset yet
    *
-   * SAFETY CHECK: Only render if there are actual artifacts to display
    */
   const artifactsElement = useMemo(() => {
     const conversationId = location.pathname.match(/\/c\/([^/]+)/)?.[1] || null;
@@ -152,11 +124,9 @@ export default function Presentation({ children }: { children: React.ReactNode }
       artifactsCount: Object.keys(artifacts ?? {}).length,
       artifactKeys: Object.keys(artifacts ?? {}),
       hasArtifacts,
-      willRender: artifactsVisibility === true && hasArtifacts,
+      willRender: artifactsVisibility === true,
     });
-
-    // SAFETY: Only show panel if visibility is true AND there are actual artifacts
-    if (artifactsVisibility === true && hasArtifacts) {
+    if (artifactsVisibility === true) {
       return (
         <ArtifactsProvider>
           <EditorProvider>

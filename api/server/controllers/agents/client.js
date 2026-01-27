@@ -3,7 +3,6 @@ const { logger } = require('@librechat/data-schemas');
 const { DynamicStructuredTool } = require('@langchain/core/tools');
 const { getBufferString, HumanMessage } = require('@langchain/core/messages');
 const {
-  GraphEvents,
   createRun,
   Tokenizer,
   checkAccess,
@@ -77,17 +76,9 @@ const payloadParser = ({ req, agent, endpoint }) => {
       parsedValues.thinking = false;
     }
     return parsedValues;
-  } else if (endpoint === EModelEndpoint.anthropic) {
-    if (req.body.endpointOption.model_parameters.thinking) {
-      delete req.body.endpointOption.model_parameters.temperature;
-    }
   }
   return req.body.endpointOption.model_parameters;
 };
-
-const noSystemModelRegex = [
-  /\b(o1-preview|o1-mini|amazon\.titan-text|anthropic|claude|claude-instant|claude-2|claude-3)\b/gi,
-];
 
 function createTokenCounter(encoding) {
   return function (message) {
@@ -866,7 +857,7 @@ class AgentClient extends BaseClient {
             conversationId: this.conversationId,
             parentMessageId: this.parentMessageId,
           },
-          user: this.options.req.user,
+          user: createSafeUser(this.options.req.user),
         },
         recursionLimit: agentsEConfig?.recursionLimit ?? 25,
         signal: abortController.signal,
@@ -923,12 +914,7 @@ class AgentClient extends BaseClient {
           agent0Id: agents[0]?.id,
         });
 
-        let systemContent = [
-          existingInstructions,
-          systemMessage,
-          mcpPromptData ?? '',
-          extraSystemInstructions ?? '',
-        ]
+        let systemContent = [existingInstructions, systemMessage, extraSystemInstructions ?? '']
           .filter(Boolean)
           .join('\n')
           .trim();
@@ -976,18 +962,7 @@ class AgentClient extends BaseClient {
         //   messages = addCacheControl(messages);
         // }
 
-          memoryPromise = this.runMemory(messages);
-        }
-
-        /** Resolve request-based headers for Custom Endpoints. Note: if this is added to
-         *  non-custom endpoints, needs consideration of varying provider header configs.
-         */
-        if (agent.model_parameters?.configuration?.defaultHeaders != null) {
-          agent.model_parameters.configuration.defaultHeaders = resolveHeaders({
-            headers: agent.model_parameters.configuration.defaultHeaders,
-            body: config.configurable.requestBody,
-          });
-        }
+        memoryPromise = this.runMemory(messages);
 
         run = await createRun({
           agents,
@@ -996,6 +971,7 @@ class AgentClient extends BaseClient {
           signal: abortController.signal,
           customHandlers: this.options.eventHandlers,
           requestBody: config.configurable.requestBody,
+          user: createSafeUser(this.options.req?.user),
           tokenCounter: createTokenCounter(this.getEncoding()),
         });
 

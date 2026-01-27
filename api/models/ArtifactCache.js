@@ -32,7 +32,6 @@ const artifactCacheSchema = mongoose.Schema(
     },
     expiresAt: {
       type: Date,
-      index: true,
     },
   },
   { timestamps: true },
@@ -53,16 +52,6 @@ artifactCacheSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 const saveArtifactCache = async (entry) => {
   const { userId, artifactId, cacheType, data, conversationId, messageId, expiresAt } = entry;
 
-  console.log('💾💾💾 [ArtifactCache.saveArtifactCache] Saving to database:', {
-    userId,
-    artifactId,
-    cacheType,
-    conversationId,
-    messageId,
-    hasConversationId: !!conversationId,
-    dataKeys: data ? Object.keys(data) : [],
-  });
-
   // Use findOneAndUpdate with upsert to create or update
   const result = await ArtifactCache.findOneAndUpdate(
     { userId, artifactId, cacheType },
@@ -82,14 +71,14 @@ const saveArtifactCache = async (entry) => {
     },
   );
 
-  console.log('✅ [ArtifactCache.saveArtifactCache] Saved successfully:', {
-    _id: result._id,
-    userId: result.userId,
-    artifactId: result.artifactId,
-    cacheType: result.cacheType,
-    conversationId: result.conversationId,
-    savedConversationId: result.conversationId || 'NOT SAVED!',
-  });
+  //   console.log('✅ [ArtifactCache.saveArtifactCache] Saved successfully:', {
+  //     _id: result._id,
+  //     userId: result.userId,
+  //     artifactId: result.artifactId,
+  //     cacheType: result.cacheType,
+  //     conversationId: result.conversationId,
+  //     savedConversationId: result.conversationId || 'NOT SAVED!',
+  //   });
 
   return result;
 };
@@ -108,14 +97,6 @@ const getArtifactCache = async (userId, artifactId, cacheType) => {
   }
 
   const results = await ArtifactCache.find(query).sort({ updatedAt: -1 });
-
-  console.log('🔍 [ArtifactCache.getArtifactCache] Query results:', {
-    userId,
-    artifactId,
-    cacheType,
-    resultsCount: results.length,
-  });
-
   return results;
 };
 
@@ -165,21 +146,7 @@ const deleteAllUserArtifactCache = async (userId) => {
  * @returns {Promise<Array>} Array of cache entries
  */
 const getConversationArtifactCache = async (userId, conversationId) => {
-  console.log('🔍 [ArtifactCache.getConversationArtifactCache] Querying database:', {
-    userId,
-    conversationId,
-  });
-
   const results = await ArtifactCache.find({ userId, conversationId }).sort({ updatedAt: -1 });
-
-  console.log('📦 [ArtifactCache.getConversationArtifactCache] Query results:', {
-    userId,
-    conversationId,
-    resultsCount: results.length,
-    resultTypes: results.map((r) => r.cacheType),
-    artifactIds: results.map((r) => r.artifactId),
-  });
-
   return results;
 };
 

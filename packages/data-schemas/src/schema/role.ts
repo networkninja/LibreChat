@@ -30,6 +30,9 @@ const rolePermissionsSchema = new Schema(
     [PermissionTypes.MULTI_CONVO]: {
       [Permissions.USE]: { type: Boolean },
     },
+    [PermissionTypes.DEFAULT_LAST_MODEL]: {
+      [Permissions.USE]: { type: Boolean },
+    },
     [PermissionTypes.TEMPORARY_CHAT]: {
       [Permissions.USE]: { type: Boolean },
     },

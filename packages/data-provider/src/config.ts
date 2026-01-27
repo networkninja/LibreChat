@@ -537,6 +537,7 @@ export const interfaceSchema = z
     parameters: z.boolean().optional(),
     sidePanel: z.boolean().optional(),
     multiConvo: z.boolean().optional(),
+    defaultLastModel: z.boolean().optional(),
     bookmarks: z.boolean().optional(),
     memories: z.boolean().optional(),
     presets: z.boolean().optional(),
@@ -559,6 +560,7 @@ export const interfaceSchema = z
       })
       .optional(),
     fileSearch: z.boolean().optional(),
+    customErrorMessage: z.string().optional(),
     fileCitations: z.boolean().optional(),
   })
   .default({
@@ -568,6 +570,7 @@ export const interfaceSchema = z
     sidePanel: true,
     presets: true,
     multiConvo: true,
+    defaultLastModel: true,
     bookmarks: true,
     memories: true,
     prompts: true,

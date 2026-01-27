@@ -32,7 +32,6 @@ export default function ModelPanel({
   const providerOption = useWatch({ control, name: 'provider' });
   const modelParameters = useWatch({ control, name: 'model_parameters' });
 
-
   const thinkingModelsRegex = useMemo(
     () =>
       /^(anthropic-)?claude-(3\.7|4([.-]\d+)?-(sonnet|opus)(-latest)?|sonnet-4(-\d{8})?)$|^groq-deepseek-r1-distill-llama-70b$/,
@@ -82,7 +81,6 @@ export default function ModelPanel({
   const parameters = useMemo((): SettingDefinition[] => {
     console.log('provider', provider, model, thinkingModelsRegex.test(model ?? ''));
 
-
     // Override provider to 'anthropic' for thinking models from NNI Models
     let providerCheck = provider;
     let endpointTypeCheck = endpointType;
@@ -93,12 +91,7 @@ export default function ModelPanel({
       console.log('🔄 Overriding provider to anthropic for thinking model:', model);
     }
 
-
     const customParams = endpointsConfig[providerCheck]?.customParams ?? {};
-    const [combinedKey, endpointKey] = getSettingsKeys(
-      endpointTypeCheck ?? providerCheck,
-      model ?? '',
-    );
     const [combinedKey, endpointKey] = getSettingsKeys(
       endpointTypeCheck ?? providerCheck,
       model ?? '',
@@ -107,25 +100,15 @@ export default function ModelPanel({
     const defaultParams =
       agentParamSettings[combinedKey] ?? agentParamSettings[overriddenEndpointKey] ?? [];
 
-
     console.log('defaultParams', defaultParams, overriddenEndpointKey, combinedKey, endpointKey);
     console.log('providerCheck:', providerCheck, 'endpointTypeCheck:', endpointTypeCheck);
-
 
     const overriddenParams = endpointsConfig[providerCheck]?.customParams?.paramDefinitions ?? [];
     const overriddenParamsMap = keyBy(overriddenParams, 'key');
 
-    const allParameters = defaultParams
+    return defaultParams
       .filter((param) => param != null)
       .map((param) => (overriddenParamsMap[param.key] as SettingDefinition) ?? param);
-
-    // Filter out specific parameters
-    const parametersToRemove = ['web_search'];
-    const filteredParameters = allParameters.filter(
-      (setting) => !parametersToRemove.includes(setting.key),
-    );
-
-    return filteredParameters;
   }, [endpointType, endpointsConfig, model, provider, thinkingModelsRegex]);
 
   const setOption = (optionKey: keyof t.AgentModelParameters) => (value: t.AgentParameterValue) => {

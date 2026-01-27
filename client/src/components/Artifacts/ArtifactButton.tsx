@@ -4,8 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { useRecoilState, useSetRecoilState, useResetRecoilState } from 'recoil';
 import type { Artifact } from '~/common';
 import FilePreview from '~/components/Chat/Input/Files/FilePreview';
-import { cn, getFileType, logger } from '~/utils';
-import { cn, getFileType, logger } from '~/utils';
+import { cn, getFileType, logger, isArtifactRoute } from '~/utils';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
 
@@ -16,13 +15,7 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
   const [artifacts, setArtifacts] = useRecoilState(store.artifactsState);
   const [currentArtifactId, setCurrentArtifactId] = useRecoilState(store.currentArtifactId);
   const isSelected = artifact?.id === currentArtifactId;
-  const [currentArtifactId, setCurrentArtifactId] = useRecoilState(store.currentArtifactId);
-  const isSelected = artifact?.id === currentArtifactId;
   const [visibleArtifacts, setVisibleArtifacts] = useRecoilState(store.visibleArtifacts);
-  const resetCurrentArtifactId = useResetRecoilState(store.currentArtifactId);
-
-  // Get current conversation ID from URL
-  const currentConversationId = location.pathname.match(/\/c\/([^/]+)/)?.[1] || null;
   const resetCurrentArtifactId = useResetRecoilState(store.currentArtifactId);
 
   // Get current conversation ID from URL
@@ -56,8 +49,6 @@ const ArtifactButton = ({ artifact }: { artifact: Artifact | null }) => {
     return () => {
       debouncedSetVisible.cancel();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [artifact?.id, artifact?.content, location.pathname]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artifact?.id, artifact?.content, location.pathname]);
 

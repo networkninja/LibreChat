@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useGetModelsQuery } from 'librechat-data-provider/react-query';
-import { useRecoilState, useRecoilValue, useSetRecoilState, useRecoilCallback } from 'recoil';
 import {
   Constants,
   FileSources,
@@ -11,6 +10,7 @@ import {
   LocalStorageKeys,
   isAssistantsEndpoint,
 } from 'librechat-data-provider';
+import { useRecoilState, useRecoilValue, useSetRecoilState, useRecoilCallback } from 'recoil';
 import type {
   TPreset,
   TSubmission,
@@ -20,18 +20,18 @@ import type {
 } from 'librechat-data-provider';
 import type { AssistantListItem } from '~/common';
 import {
-  updateLastSelectedModel,
-  getDefaultModelSpec,
+  buildDefaultConvo,
   getDefaultEndpoint,
   getModelSpecPreset,
-  buildDefaultConvo,
-  logger,
+  getDefaultModelSpec,
+  updateLastSelectedModel,
 } from '~/utils';
 import { useDeleteFilesMutation, useGetEndpointsQuery, useGetStartupConfig } from '~/data-provider';
 import useAssistantListMap from './Assistants/useAssistantListMap';
 import { useResetChatBadges } from './useChatBadges';
-import { useApplyModelSpecEffects } from './Agents';
 import { usePauseGlobalAudio } from './Audio';
+import { useApplyModelSpecEffects } from '~/hooks/Agents';
+import { logger } from '~/utils';
 import store from '~/store';
 
 const useNewConvo = (index = 0) => {
@@ -47,12 +47,6 @@ const useNewConvo = (index = 0) => {
   const clearAllLatestMessages = store.useClearLatestMessages(`useNewConvo ${index}`);
   const setSubmission = useSetRecoilState<TSubmission | null>(store.submissionByIndex(index));
   const { data: endpointsConfig = {} as TEndpointsConfig } = useGetEndpointsQuery();
-
-  // CRITICAL: Add artifact reset functionality
-  const resetArtifacts = useResetRecoilState(store.artifactsState);
-  const resetCurrentArtifactId = useResetRecoilState(store.currentArtifactId);
-  const resetArtifactsVisibility = useResetRecoilState(store.artifactsVisibility);
-  const resetVisibleArtifacts = useResetRecoilState(store.visibleArtifacts);
 
   const modelsQuery = useGetModelsQuery();
   const assistantsListMap = useAssistantListMap();
@@ -84,6 +78,7 @@ const useNewConvo = (index = 0) => {
         const modelsConfig = modelsData ?? modelsQuery.data;
         const { endpoint = null } = conversation;
         const buildDefaultConversation = (endpoint === null || buildDefault) ?? false;
+        const useDefaultLastModel = startupConfig?.interface?.defaultLastModel ?? false;
         const activePreset =
           // use default preset only when it's defined,
           // preset is not provided,
@@ -104,7 +99,7 @@ const useNewConvo = (index = 0) => {
 
         if (buildDefaultConversation) {
           let defaultEndpoint = getDefaultEndpoint({
-            convoSetup: activePreset ?? conversation,
+            convoSetup: useDefaultLastModel ? conversation : (activePreset ?? conversation),
             endpointsConfig,
           });
 
@@ -155,11 +150,34 @@ const useNewConvo = (index = 0) => {
           }
 
           const models = modelsConfig?.[defaultEndpoint] ?? [];
+          console.log('Models Config', modelsConfig, defaultEndpoint, models);
+          const defaultModelSpec = getDefaultModelSpec(startupConfig);
+          console.log('Using default model spec preset:', defaultModelSpec);
+          // CRITICAL: When useDefaultLastModel is true, use the default model spec
+          // When false, use the active preset (which could be null, allowing fallback to localStorage)
+          let lastConversationSetup: TConversation | null = null;
+
+          if (!useDefaultLastModel && activePreset) {
+            // Use active preset when useDefaultLastModel is false
+            lastConversationSetup = activePreset as TConversation;
+            console.log('Using active preset:', activePreset);
+          } else {
+            // Pass null to allow fallback to localStorage's lastSelectedModel
+            lastConversationSetup = null;
+            console.log('No preset/spec, will fall back to localStorage lastSelectedModel');
+          }
+
+          console.log('Default Model Spec', defaultModelSpec);
+          console.log('Active Preset', activePreset);
+          console.log('Last Conversation Setup:', lastConversationSetup);
+          console.log('Will use default model spec:', useDefaultLastModel);
+
           conversation = buildDefaultConvo({
             conversation,
-            lastConversationSetup: activePreset as TConversation,
+            lastConversationSetup: lastConversationSetup,
             endpoint: defaultEndpoint,
             models,
+            index,
           });
         }
 
@@ -240,13 +258,6 @@ const useNewConvo = (index = 0) => {
       if (!saveBadgesState) {
         resetBadges();
       }
-
-      // CRITICAL: Reset artifacts when creating a new conversation
-      console.log('🔄 [useNewConvo] Resetting artifacts for new conversation');
-      resetArtifacts();
-      resetCurrentArtifactId();
-      resetArtifactsVisibility();
-      resetVisibleArtifacts(); // <-- This line ensures visibleArtifacts is cleared
 
       const templateConvoId = _template.conversationId ?? '';
       const paramEndpoint =

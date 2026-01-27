@@ -1,8 +1,5 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Constants } from 'librechat-data-provider';
-import { useRecoilState, useResetRecoilState } from 'recoil';
-import { useLocation } from 'react-router-dom';
 import { useRecoilState, useResetRecoilState } from 'recoil';
 import { useLocation } from 'react-router-dom';
 import { useArtifactsContext } from '~/Providers';
@@ -28,11 +25,8 @@ export default function useArtifacts() {
   const { isSubmitting, latestMessageId, latestMessageText } = useArtifactsContext();
 
   const [artifacts, setArtifacts] = useRecoilState(store.artifactsState);
-  const [artifacts, setArtifacts] = useRecoilState(store.artifactsState);
   const resetArtifacts = useResetRecoilState(store.artifactsState);
   const resetCurrentArtifactId = useResetRecoilState(store.currentArtifactId);
-  const resetArtifactsVisibility = useResetRecoilState(store.artifactsVisibility);
-  const resetVisibleArtifacts = useResetRecoilState(store.visibleArtifacts);
   const resetArtifactsVisibility = useResetRecoilState(store.artifactsVisibility);
   const resetVisibleArtifacts = useResetRecoilState(store.visibleArtifacts);
   const [currentArtifactId, setCurrentArtifactId] = useRecoilState(store.currentArtifactId);
@@ -131,14 +125,11 @@ export default function useArtifacts() {
   const orderedArtifactIds = useMemo(() => {
     console.log('artifacts in order', artifacts);
     // Show all artifacts for now - no filtering
-    console.log('artifacts in order', artifacts);
-    // Show all artifacts for now - no filtering
     return Object.keys(artifacts ?? {}).sort(
       (a, b) => (artifacts?.[a]?.lastUpdateTime ?? 0) - (artifacts?.[b]?.lastUpdateTime ?? 0),
     );
   }, [artifacts]);
 
-  const prevIsSubmittingRef = useRef<boolean>(false);
   const prevIsSubmittingRef = useRef<boolean>(false);
   const lastContentRef = useRef<string | null>(null);
   const hasEnclosedArtifactRef = useRef<boolean>(false);
@@ -147,17 +138,12 @@ export default function useArtifacts() {
   const prevConversationIdRef = useRef<string | null>(null);
   const pendingArtifactUpdateRef = useRef<boolean>(false);
   const refreshedArtifactsRef = useRef<Set<string>>(new Set());
-  const pendingArtifactUpdateRef = useRef<boolean>(false);
-  const refreshedArtifactsRef = useRef<Set<string>>(new Set());
 
-  // Reset artifacts and cache when conversation changes
   // Reset artifacts and cache when conversation changes
   useEffect(() => {
     const resetState = () => {
       resetArtifacts();
       resetCurrentArtifactId();
-      resetArtifactsVisibility();
-      resetVisibleArtifacts();
       resetArtifactsVisibility();
       resetVisibleArtifacts();
       prevConversationIdRef.current = conversationId;
@@ -210,54 +196,7 @@ export default function useArtifacts() {
       } else {
         resetState();
       }
-      hasAutoSwitchedToCodeRef.current = false;
-      pendingArtifactUpdateRef.current = false;
-      refreshedArtifactsRef.current.clear(); // Clear refresh tracking on conversation change
-
-      // Clear the artifact cache as well (but keep database sync)
-      // Don't clear cache completely on refresh - only on actual conversation changes
-      if (isConversationChange) {
-        artifactCache.clearAll();
-        console.log('Cleared all artifact caches on conversation change');
-      } else {
-        console.log('Page refresh detected - preserving artifact cache');
-      }
-    };
-
-    // Get the previously stored conversation ID
-    const storedConversationId = loadConversationIdFromStorage();
-
-    // Check if this is a genuine conversation change (not a page refresh)
-    const isConversationChange =
-      conversationId !== storedConversationId &&
-      storedConversationId != null &&
-      conversationId !== null;
-
-    if (isConversationChange && conversationId !== Constants.NEW_CONVO) {
-      console.log('Conversation changed, saving current artifacts and loading new ones:', {
-        from: storedConversationId,
-        to: conversationId,
-      });
-
-      // Save current artifacts for the old conversation
-      if (storedConversationId && artifacts) {
-        saveArtifactsToStorage(artifacts, storedConversationId);
-      }
-
-      // Load artifacts for the new conversation
-      const newArtifacts = loadArtifactsFromStorage(conversationId);
-      if (newArtifacts) {
-        setArtifacts(newArtifacts);
-        console.log(
-          'Loaded artifacts for conversation:',
-          conversationId,
-          Object.keys(newArtifacts),
-        );
-      } else {
-        resetState();
-      }
     } else if (conversationId === Constants.NEW_CONVO) {
-      console.log('Starting new conversation, resetting artifacts');
       console.log('Starting new conversation, resetting artifacts');
       resetState();
     } else {
@@ -289,8 +228,6 @@ export default function useArtifacts() {
     saveConversationIdToStorage(conversationId);
     prevConversationIdRef.current = conversationId;
     return () => {
-      console.log('artifacts_visibility', 'Unmounting artifacts');
-      // resetState();
       console.log('artifacts_visibility', 'Unmounting artifacts');
       // resetState();
     };
@@ -326,11 +263,8 @@ export default function useArtifacts() {
 
   // Set current artifact ID to the latest artifact ONLY if not already set,
   // or if the artifact list changes and the currentArtifactId is no longer present.
-  // CRITICAL: This should ONLY run when currentArtifactId is null or invalid,
-  // NOT when user manually selects an artifact button
   useEffect(() => {
     if (orderedArtifactIds.length > 0) {
-      // If currentArtifactId is not set or is not in the list, set to latest
       if (!currentArtifactId || !orderedArtifactIds.includes(currentArtifactId)) {
         const latestArtifactId = orderedArtifactIds[orderedArtifactIds.length - 1];
         setCurrentArtifactId(latestArtifactId);
@@ -352,20 +286,10 @@ export default function useArtifacts() {
   }, [currentArtifactId, artifacts, setRefreshTrigger]);
 
   // Handle artifact updates and tab switching during message generation
-  // When switching to an artifactupdate, always trigger a refresh to ensure merge
-  useEffect(() => {
-    if (!currentArtifactId) return;
-    const current = artifacts?.[currentArtifactId];
-    if (current && current.type === 'artifactupdate') {
-      // Only trigger refresh once per artifact to prevent infinite loop
-      if (!refreshedArtifactsRef.current.has(currentArtifactId)) {
-        refreshedArtifactsRef.current.add(currentArtifactId);
-        setRefreshTrigger((prev) => prev + 1);
-      }
-    }
-  }, [currentArtifactId, artifacts, setRefreshTrigger]);
-
-  // Handle artifact updates and tab switching during message generation
+  /**
+   * Manage artifact selection and code tab switching for non-enclosed artifacts
+   * Runs when artifact content changes
+   */
   useEffect(() => {
     // Check if we just finished submitting (transition from true to false)
     const justFinishedSubmitting = prevIsSubmittingRef.current && !isSubmitting;
@@ -395,9 +319,6 @@ export default function useArtifacts() {
     console.log('latestMessageText', latestMessageText);
 
     // Detect standard artifact syntax
-    console.log('latestMessageText', latestMessageText);
-
-    // Detect standard artifact syntax
     const hasEnclosedArtifact =
       /:::artifact(?:\{[^}]*\})?(?:\s|\n)*(?:```[\s\S]*?```(?:\s|\n)*)?:::/m.test(
         latestMessageText.trim(),
@@ -411,18 +332,8 @@ export default function useArtifacts() {
     // Check if there's a cached update for this artifact
     const hasCachedUpdate = latestArtifact?.id && artifactCache.isSelectionValid(latestArtifact.id);
     console.log('hasCachedUpdate for', latestArtifact?.id, hasCachedUpdate);
-    console.log('hasEnclosedArtifact', hasEnclosedArtifact);
-
-    // Detect artifact update marker
-    const hasArtifactUpdate = latestMessageText.includes('::artifactupdate');
-    console.log('hasArtifactUpdate', hasArtifactUpdate);
-
-    // Check if there's a cached update for this artifact
-    const hasCachedUpdate = latestArtifact?.id && artifactCache.isSelectionValid(latestArtifact.id);
-    console.log('hasCachedUpdate for', latestArtifact?.id, hasCachedUpdate);
 
     if (hasEnclosedArtifact && !hasEnclosedArtifactRef.current) {
-      // New artifact created, switch to preview
       // New artifact created, switch to preview
       setActiveTab('preview');
       hasEnclosedArtifactRef.current = true;
@@ -442,23 +353,7 @@ export default function useArtifacts() {
           setRefreshTrigger((prev) => prev + 1);
         }, 750);
       }
-    } else if (hasArtifactUpdate || hasCachedUpdate) {
-      // Artifact update detected, switch to code view
-      console.log('Artifact update detected, switching to code view');
-      setActiveTab('code');
-      hasEnclosedArtifactRef.current = true;
-      pendingArtifactUpdateRef.current = true;
-
-      // Trigger a refresh to ensure the artifact updates (only once per artifact)
-      const artifactIdToRefresh = latestArtifactId;
-      if (!refreshedArtifactsRef.current.has(artifactIdToRefresh)) {
-        refreshedArtifactsRef.current.add(artifactIdToRefresh);
-        setTimeout(() => {
-          setRefreshTrigger((prev) => prev + 1);
-        }, 750);
-      }
     } else if (!hasEnclosedArtifactRef.current && !hasAutoSwitchedToCodeRef.current) {
-      // Check if current message contains artifact content
       // Check if current message contains artifact content
       const artifactStartContent = latestArtifact?.content?.slice(0, 50) ?? '';
       if (artifactStartContent.length > 0 && latestMessageText.includes(artifactStartContent)) {
@@ -499,14 +394,11 @@ export default function useArtifacts() {
     }
   }, [isSubmitting, latestMessageText]);
 
-  // Reset flags when message ID changes
   useEffect(() => {
     if (latestMessageId !== lastRunMessageIdRef.current) {
       lastRunMessageIdRef.current = latestMessageId;
       hasEnclosedArtifactRef.current = false;
       hasAutoSwitchedToCodeRef.current = false;
-      pendingArtifactUpdateRef.current = false;
-      refreshedArtifactsRef.current.clear(); // Clear refresh tracking for new message
       pendingArtifactUpdateRef.current = false;
       refreshedArtifactsRef.current.clear(); // Clear refresh tracking for new message
     }
@@ -566,7 +458,6 @@ export default function useArtifacts() {
 
   return {
     activeTab,
-    isMermaid,
     setActiveTab,
     currentIndex,
     currentArtifact: currentDisplayArtifact, // Use the display artifact everywhere

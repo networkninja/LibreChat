@@ -562,21 +562,21 @@ ${currentSelection}
           artifactIndex: artifact.index,
           artifactMessageId: artifact.messageId,
           timestamp: Date.now(),
-            source: 'user' as const,
+          source: 'user' as const,
         };
 
         // Cache the selection context if this is an update request
-          if (isUpdate && updateArtifactKey) {
-            console.log('setSelection', updateArtifactKey, context);
-            artifactCache.setSelection(updateArtifactKey, context, {
-              conversationId: conversationId || undefined,
-              messageId: artifact.messageId || undefined,
-            });
-            console.log('🟢 [ArtifactCodeEditor] Cached selection context for artifact:', {
-              artifactId: artifact.id,
-              conversationId,
+        if (isUpdate && updateArtifactKey) {
+          console.log('setSelection', updateArtifactKey, context);
+          artifactCache.setSelection(updateArtifactKey, context, {
+            conversationId: conversationId || undefined,
+            messageId: artifact.messageId || undefined,
+          });
+          console.log('🟢 [ArtifactCodeEditor] Cached selection context for artifact:', {
+            artifactId: artifact.id,
+            conversationId,
             context,
-            });
+          });
 
           // Also cache the selected content with line information using the enhanced cache
           if (currentSelection && selectionInfo) {
@@ -599,22 +599,22 @@ ${currentSelection}
           }
         }
 
-      // Include all necessary context for updating the artifact
-      const messageObject = {
-        message,
-        selectionContext: context,
-        isArtifactUpdate: isUpdate,
-      };
+        // Include all necessary context for updating the artifact
+        const messageObject = {
+          message,
+          selectionContext: context,
+          isArtifactUpdate: isUpdate,
+        };
 
-      console.log('Submitting selection with context:', messageObject, context);
+        console.log('Submitting selection with context:', messageObject, context);
 
-      // Send the selection data for processing
-      onSelectionSubmit(messageObject);
+        // Send the selection data for processing
+        onSelectionSubmit(messageObject);
 
-      setShowSelectionTooltip(false);
-      setCustomPromptOpen(false);
-      setCustomPrompt('');
-      setSelectionInfo(null); // <-- This clears highlight only after submit
+        setShowSelectionTooltip(false);
+        setCustomPromptOpen(false);
+        setCustomPrompt('');
+        setSelectionInfo(null); // <-- This clears highlight only after submit
 
         // Clear the selection
         window.getSelection()?.removeAllRanges();
@@ -828,8 +828,6 @@ export const ArtifactCodeEditor = function ({
   sharedProps,
   onSelectionSubmit,
   readOnly: externalReadOnly,
-  onSelectionSubmit,
-  readOnly: externalReadOnly,
 }: {
   fileKey: string;
   artifact: Artifact;
@@ -837,8 +835,6 @@ export const ArtifactCodeEditor = function ({
   template: SandpackProviderProps['template'];
   sharedProps: Partial<SandpackProviderProps>;
   editorRef: React.MutableRefObject<CodeEditorRef>;
-  onSelectionSubmit?: (message: any) => void;
-  readOnly?: boolean;
   onSelectionSubmit?: (message: any) => void;
   readOnly?: boolean;
 }) {
@@ -856,11 +852,7 @@ export const ArtifactCodeEditor = function ({
   }, [config, template, fileKey]);
   const initialReadOnly = (externalReadOnly ?? false) || (isSubmitting ?? false);
   const [readOnly, setReadOnly] = useState(initialReadOnly);
-  const initialReadOnly = (externalReadOnly ?? false) || (isSubmitting ?? false);
-  const [readOnly, setReadOnly] = useState(initialReadOnly);
   useEffect(() => {
-    setReadOnly((externalReadOnly ?? false) || (isSubmitting ?? false));
-  }, [isSubmitting, externalReadOnly]);
     setReadOnly((externalReadOnly ?? false) || (isSubmitting ?? false));
   }, [isSubmitting, externalReadOnly]);
 
@@ -887,19 +879,9 @@ export const ArtifactCodeEditor = function ({
         readOnly={readOnly}
         onSelectionSubmit={onSelectionSubmit}
       />
-      <CodeEditor
-        fileKey={fileKey}
-        artifact={artifact}
-        editorRef={editorRef}
-        readOnly={readOnly}
-        onSelectionSubmit={onSelectionSubmit}
-      />
     </StyledProvider>
   );
 };
-
-// Export the centralized artifact cache
-export { artifactCache } from './artifactCache';
 
 // Export the centralized artifact cache
 export { artifactCache } from './artifactCache';

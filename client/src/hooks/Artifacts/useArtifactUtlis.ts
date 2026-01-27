@@ -65,9 +65,19 @@ export function applyPartialUpdate(
 
     normalized = normalized.replace(/\\n/g, '\n');
 
+    if (
+      normalized.startsWith('"') &&
+      normalized.endsWith('"') &&
+      normalized.length > 2 &&
+      !normalized.slice(1, -1).includes('"') // No quotes in the middle (simple quoted string)
+    ) {
+      console.log('🔧 [NORMALIZATION] Removing outer wrapper quotes from simple quoted string');
+      normalized = normalized.slice(1, -1); // Remove first and last quote
+    }
+
     if (normalized.startsWith('"') && (normalized.includes('${') || normalized.includes('`'))) {
       // Check for patterns like: "${...}" or "`...`" or "${...`}"
-      if (normalized.match(/^"[\$`].*[`}]"$/)) {
+      if (normalized.match(/^"[$`].*[`}]"$/)) {
         console.log('🔧 [NORMALIZATION] Removing malformed template literal wrapping quotes');
         normalized = normalized.slice(1, -1); // Remove first and last quote
       }
@@ -101,9 +111,6 @@ export function applyPartialUpdate(
   }
 
   if (isFullDoc(originalContent) && isSnippet(updateContent)) {
-    //console.log('🩹 [Snippet Update] Detected snippet update to full document');
-
-    // STRATEGY: Try to find selection context first for precise placement
     const selectionContext =
       artifactCache.getSelection(artifactId) || artifactCache.getSelection(baseIdentifier);
 
@@ -339,10 +346,10 @@ export function applyPartialUpdate(
   }
 
   // --- Precise merging using line and column ---
-  let startLine = cachedSelection.startLine;
-  let endLine = cachedSelection.endLine;
-  let startColumn = cachedSelection.startColumn;
-  let endColumn = cachedSelection.endColumn;
+  const startLine = cachedSelection.startLine;
+  const endLine = cachedSelection.endLine;
+  const startColumn = cachedSelection.startColumn;
+  const endColumn = cachedSelection.endColumn;
   const lines = originalContent.split('\n');
   if (typeof updateContent === 'undefined') return originalContent;
   const updateLines = updateContent.split('\n');
@@ -443,20 +450,10 @@ export function applyPartialUpdate(
 
         // Remove quotes at start/end if present (e.g., "text" -> text)
         parsedText = parsedText.replace(/^["']|["']$/g, '');
-
-        // Unescape special characters
         parsedText = parsedText.replace(/\\n/g, '\n'); // \n -> actual newline
-
-        console.log('✅ [PARSING] Converted string syntax to actual text:', {
-          before: originalText.substring(0, 100),
-          after: parsedText.substring(0, 100),
-          beforeLength: originalText.length,
-          afterLength: parsedText.length,
-        });
 
         originalText = parsedText;
 
-        // Update the cached selection with parsed text for future searches
         cachedSelection = {
           ...cachedSelection,
           originalText: parsedText,
@@ -640,7 +637,7 @@ export function applyPartialUpdate(
                 startColumn: bestMatch.columnIndex,
                 endColumn: bestMatch.columnIndex + originalText.length,
               };
-        } else {
+            } else {
               // No matches with same element type in ±50 lines - this is suspicious!
               console.error(
                 '❌ [DISAMBIGUATION - ELEMENT TYPE MISMATCH] No matches with same element type!',
@@ -723,15 +720,6 @@ export function applyPartialUpdate(
                     : closest,
                 lineLocations[0],
               );
-
-        // console.log('✅ [CLOSEST MATCH] Using occurrence nearest to provided coordinates', {
-        //   providedLine: startLine,
-        //   foundAtLine: closestMatch.line,
-        //   foundAtColumn: closestMatch.columnIndex,
-        //   lineOffset: closestMatch.line - startLine,
-        // });
-
-              // Update coordinates to the closest occurrence
               cachedSelection = {
                 ...cachedSelection,
                 startLine: closestOccurrence.line,
@@ -902,7 +890,6 @@ export function applyPartialUpdate(
                 newEndColumn = textLines[textLines.length - 1].length;
               }
 
-              // Verify extraction
               let extractedText = '';
               if (newStartLine === newEndLine) {
                 extractedText = lines[newStartLine]?.slice(newStartColumn, newEndColumn) || '';
@@ -950,8 +937,6 @@ export function applyPartialUpdate(
             startColumn: newStartColumn,
             endColumn: newEndColumn,
           };
-
-          // Re-extract with corrected positions
           const correctedLines = originalContent.split('\n');
           if (newStartLine === newEndLine) {
             currentTextAtLocation =
@@ -1006,6 +991,7 @@ export function applyPartialUpdate(
                 matchType: 'EXACT',
               };
             }
+
             // Only apply fuzzy matching for strings >= 15 characters
             if (originalText.trim().length < 15) {
               return { found: false };
@@ -1183,7 +1169,7 @@ export function applyPartialUpdate(
                 const combinedPattern = new RegExp(patterns.join('.*'), 'i');
                 if (combinedPattern.test(line)) {
                   const classNameStart = line.indexOf('className=');
-                    if (classNameStart !== -1) {
+                  if (classNameStart !== -1) {
                     return {
                       found: true,
                       startLine: searchLine,
@@ -1300,7 +1286,6 @@ export function applyPartialUpdate(
               // FUZZY MATCH for multi-line: Try fuzzy matching on the potentialMatch we just built
               // Only attempt fuzzy matching if we haven't found an exact match yet
               if (!globalFoundMatch && textLines.length > 0) {
-
                 const originalFirstLine = textLines[0].trim();
                 const actualFirstLine = potentialLines[0]?.trim() || '';
 
@@ -1536,31 +1521,17 @@ export function applyPartialUpdate(
               const middleParts = currentLines.slice(startLine + 1, endLine);
               currentTextAtCoords = [firstPart, ...middleParts, lastPart].join('\n');
             }
-
-
-            // If the text at coordinates is identical to updateContent, skip the update
             if (currentTextAtCoords === updateContent) {
               return originalContent;
             }
-
-            // Continue with the original coordinates - they're our best guess
-            // The pre-merge duplication check (lines 636-677) will catch any duplication issues
           }
         }
-      } else if (skipValidation) {
-        // In sequential mode, we found originalText and it matches
-        console.log('✅ [VALIDATION PASSED - SEQUENTIAL MODE] Original text found and located');
-      } else {
-        // Non-sequential mode and text matches exactly
-        console.log('✅ [VALIDATION PASSED] Original text matches - safe to apply update');
       }
-    } // END: LLM validation block (cachedSelection.source !== 'user')
+    }
   } else {
     console.warn('⚠️ [VALIDATION SKIPPED] No originalText in selection context');
   }
 
-  // Re-extract line/column numbers (may have been corrected above)
-  // NOTE: Using 'let' instead of 'const' because these may be updated if pre-merge validation finds incomplete coordinates
   let finalStartLine = cachedSelection.startLine;
   let finalEndLine = cachedSelection.endLine;
   let finalStartColumn = cachedSelection.startColumn;
@@ -1658,8 +1629,6 @@ export function applyPartialUpdate(
       const beforeTrimmed = before.trim();
       const firstUpdateLineTrimmed = updateLines[0].trim();
 
-      // Check if the first line of the update starts with the same text as 'before'
-      // This would create: "const [todos, setTodos] = useState([{const [todos, setTodos] = useState(["
       if (firstUpdateLineTrimmed.startsWith(beforeTrimmed)) {
         console.error('🚨 DUPLICATE/NESTED CODE DETECTED!', {
           before: `"${before}"`,
@@ -1708,7 +1677,6 @@ export function applyPartialUpdate(
       const lastLine = updateLines[updateLines.length - 1] + after;
       const middleLines = updateLines.slice(1, -1);
 
-
       const newLines = [
         ...lines.slice(0, finalStartLine),
         firstLine,
@@ -1733,7 +1701,6 @@ export function applyPartialUpdate(
 
       const result = newLines.join('\n');
       const finalResult = result.replace(/\n$/, ''); // Strip only the last newline
-
 
       return finalResult;
     }
@@ -1790,14 +1757,14 @@ export function applyPartialUpdate(
 
     if (shouldReplaceFullLines) {
       // FULL LINE REPLACEMENT - ignore column coordinates entirely
-      console.log('✅ [FULL LINE MODE] Replacing complete lines - ignoring column coordinates');
+      console.log('[FULL LINE MODE] Replacing complete lines - ignoring column coordinates');
       beforeStart = '';
       afterEnd = '';
       before = lines.slice(0, finalStartLine);
       after = lines.slice(finalEndLine + 1);
     } else {
       // COLUMN-BASED REPLACEMENT - use exact coordinates
-      console.log('✅ [COLUMN MODE] Using precise column coordinates for partial line replacement');
+      console.log('[COLUMN MODE] Using precise column coordinates for partial line replacement');
       beforeStart = lines[finalStartLine]?.slice(0, finalStartColumn) || '';
       afterEnd = lines[finalEndLine]?.slice(finalEndColumn) || '';
       before = lines.slice(0, finalStartLine);
@@ -1908,7 +1875,6 @@ export function applyPartialUpdate(
             endColumn: newEndColumn,
           };
 
-
           // Update all the coordinate variables to match corrected values
           finalStartLine = newStartLine;
           finalEndLine = newEndLine;
@@ -1978,7 +1944,8 @@ export function applyPartialUpdate(
       }
     }
 
-    finalStartColumn === 0 &&
+    const isFullLineSelection =
+      finalStartColumn === 0 &&
       (finalAfterEnd.trim() === '' || correctedEndColumn === (lines[finalEndLine]?.length || 0));
 
     // This happens when beforeStart is just indentation but the update includes the full line
@@ -2036,7 +2003,6 @@ export function applyPartialUpdate(
     }
 
     const finalMergedUpdateLines = [...mergedUpdateLines];
-
 
     const mergedContent = [...before, ...finalMergedUpdateLines, ...after].join('\n');
 
@@ -2114,9 +2080,6 @@ export function applyAllPartialUpdates(
       titleCount: (originalContent.match(/<title>/gi) || []).length,
       action: 'Looking for base artifact content',
     });
-
-    // Find the base (non-update) artifact with the same identifier
-    // The identifier is SHARED between base and updates - don't split it
     const targetBaseIdentifier = targetArtifact?.identifier;
 
     const baseArtifact = Object.values(artifacts).find(
@@ -2184,10 +2147,8 @@ export function applyAllPartialUpdates(
   }
 
   let count = 0;
-  const baseContent = mergedContent; // Store the original base content for logging
 
   for (const updateArtifact of updateArtifacts) {
-
     const newContent = applyPartialUpdate(
       mergedContent, // Build on previous updates sequentially
       updateArtifact.content, // Apply this update's content
@@ -2220,8 +2181,6 @@ export function applyAllPartialUpdates(
   } else if (isStreaming) {
     console.log('⏸️ Skipping final cache save during streaming');
   }
-
-  // 🔍 FINAL CHANGE DETECTION: Show exactly what changed
   _logContentChanges(originalContent, mergedContent, targetArtifact?.title || 'unknown');
 
   return mergedContent;
