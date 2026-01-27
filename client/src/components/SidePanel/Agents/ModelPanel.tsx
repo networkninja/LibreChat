@@ -104,6 +104,7 @@ export default function ModelPanel({
 
     return defaultParams
       .filter((param) => param != null)
+      .filter((param) => param.key !== 'web_search') // Remove web_search toggle
       .map((param) => (overriddenParamsMap[param.key] as SettingDefinition) ?? param);
   }, [endpointType, endpointsConfig, model, provider, thinkingModelsRegex]);
 
