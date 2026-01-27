@@ -56,14 +56,24 @@ endpoints:
 
 #### Configure Brave Search (Optional)
 
-If using Brave Search MCP server, see servers/brave_search/readme.md for complete setup instructions.
-
 Basic configuration:
 ```yaml
 mcpServers:
-  brave_search:
-    type: streamable-http
-    url: "http://brave-search-mcp:9001/mcp"
+  brave-search:
+    type: stdio
+    command: npx
+    args:
+      - -y
+      - "@brave/brave-search-mcp-server"
+      - "--transport"
+      - "stdio"
+      - "--enabled-tools"
+      - "brave_web_search"
+      - "brave_news_search"
+    env:
+      BRAVE_API_KEY: "YOUR-BRAVE-API-KEY-HERE"
+    timeout: 60000
+    initTimeout: 15000
 ```
 
 #### Configure Google Grounding (Optional)
@@ -81,17 +91,7 @@ mcpServers:
 ```
 ---
 
-## 3. Network Setup (One-Time)
-
-Create a Docker network for container communication:
-
-```bash
-docker network create librechat-network
-```
-
----
-
-## 4. Build the Docker Image
+## 3. Build the Docker Image
 
 Build LibreChat with the `--no-cache` flag to ensure a clean build:
 
@@ -101,7 +101,7 @@ docker build --no-cache -f librechat-nni-fork-dockerfile -t librechat:nni .
 
 ---
 
-## 5. Run LibreChat
+## 4. Run LibreChat
 
 ### Default: Run with terminal output (Recommended)
 
@@ -137,7 +137,7 @@ docker run -d \
 
 ---
 
-## 6. Access LibreChat
+## 5. Access LibreChat
 
 Open your browser to: **http://localhost:3080**
 
