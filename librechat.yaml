@@ -1,0 +1,92 @@
+---
+# LibreChat Configuration for ECS Deployment
+# For more information: https://docs.librechat.ai/install/configuration/custom_config.html
+#
+# This file should be mounted into the LibreChat container at /app/librechat.yaml
+# Environment variables (${VAR}) are resolved by LibreChat at runtime.
+#
+# Required environment variables:
+#   - LITELLM_API_KEY: API key for the LiteLLM proxy
+#   - DJANGO_API_KEY: API key for MCP Bridge (must match Django's MCP_SERVICE_API_KEY)
+
+version: 1.2.8
+cache: true
+
+# Interface configuration
+interface:
+  endpointsMenu: true
+  modelSelect: true
+  parameters: true
+  sidePanel: true
+  presets: true
+  prompts: true
+  bookmarks: true
+  multiConvo: true
+  artifacts: true
+
+# File configuration
+fileConfig:
+  endpoints:
+    assistants:
+      fileLimit: 5
+      fileSizeLimit: 20
+      supportedMimeTypes:
+        - "text/plain"
+        - "application/pdf"
+        - "image/jpeg"
+        - "image/png"
+        - "image/webp"
+    default:
+      totalSizeLimit: 100
+      serverFileSizeLimit: 50
+
+# Registration settings - ENABLES SSO BUTTON
+registration:
+  socialLogins: ["openid"]
+
+# Endpoints configuration
+# NOTE: Adjust baseURL based on AIML's LiteLLM proxy for the target environment
+endpoints:
+  custom:
+    - name: "NNI Models"
+      apiKey: "${LITELLM_API_KEY}"
+      baseURL: "https://aimlapi-stage.networkninja.com/v1"
+      models:
+        default:
+          [
+            "gpt-4o-0806",
+            "claude-4-opus",
+            "claude-4-sonnet",
+            "gpt-4.1",
+            "o1-mini",
+          ]
+        fetch: true
+      titleConvo: true
+      titleModel: "gpt-4o-0806"
+      modelDisplayLabel: "networkninja personal"
+  agents:
+    recursionLimit: 50
+    maxRecursionLimit: 100
+    disableBuilder: false
+    capabilities:
+      - "tools"
+      - "artifacts"
+
+# MCP Server Configuration (Collaborate Django Bridge)
+# Connects LibreChat to the Collaborate MCP Bridge for case management tools
+mcpServers:
+  djangoBridge:
+    url: "http://collaborate-saas-mcp-bridge.collaborate-saas.local:8000/mcp"
+    type: "streamable-http"
+    headers:
+      # Service authentication
+      X-API-Key: "${DJANGO_API_KEY}"
+      # User context headers - LibreChat injects these from the logged-in user's session
+      X-User-ID: "{{LIBRECHAT_USER_ID}}"
+      X-User-Email: "{{LIBRECHAT_USER_EMAIL}}"
+      X-User-Name: "{{LIBRECHAT_USER_NAME}}"
+    timeout: 60000
+    initTimeout: 60000
+    icon: "🔗"
+    showInMenu: true
+    startup: true
