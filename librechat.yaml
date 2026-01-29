@@ -74,9 +74,10 @@ endpoints:
 
 # MCP Server Configuration (Collaborate Django Bridge)
 # Connects LibreChat to the Collaborate MCP Bridge for case management tools
+# URL uses Service Connect format (just service name, no .namespace.local suffix)
 mcpServers:
   djangoBridge:
-    url: "http://collaborate-saas-mcp-bridge.collaborate-saas.local:8000/mcp"
+    url: "http://collaborate-saas-mcp-bridge:8000/mcp"
     type: "streamable-http"
     headers:
       # Service authentication
