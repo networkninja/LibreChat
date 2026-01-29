@@ -217,12 +217,28 @@ Please follow these instructions when using tools from the respective MCP server
       }
 
       const rawConfig = (await registry.getServerConfig(serverName, userId)) as t.MCPOptions;
+
+      // DEBUG: Log user and headers before processing
+      logger.debug(`${logPrefix}[MCP Debug] Before processMCPEnv:`, {
+        hasUser: !!user,
+        userId: user?.id,
+        userEmail: (user as { email?: string })?.email,
+        userKeys: user ? Object.keys(user) : [],
+        rawHeaders: 'headers' in rawConfig ? rawConfig.headers : 'none',
+      });
+
       const currentOptions = processMCPEnv({
         user,
         options: rawConfig,
         customUserVars: customUserVars,
         body: requestBody,
       });
+
+      // DEBUG: Log headers after processing
+      logger.debug(`${logPrefix}[MCP Debug] After processMCPEnv:`, {
+        processedHeaders: 'headers' in currentOptions ? currentOptions.headers : 'none',
+      });
+
       if ('headers' in currentOptions) {
         connection.setRequestHeaders(currentOptions.headers || {});
       }

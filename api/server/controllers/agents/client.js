@@ -845,6 +845,16 @@ class AgentClient extends BaseClient {
       /** @type {AppConfig['endpoints']['agents']} */
       const agentsEConfig = appConfig.endpoints?.[EModelEndpoint.agents];
 
+      // DEBUG: Log user object for MCP header troubleshooting
+      const mcpSafeUser = createSafeUser(this.options.req.user);
+      logger.debug('[AgentClient][MCP Debug] User object for configurable:', {
+        hasReqUser: !!this.options.req?.user,
+        reqUserEmail: this.options.req?.user?.email,
+        reqUserKeys: this.options.req?.user ? Object.keys(this.options.req.user) : [],
+        safeUserEmail: mcpSafeUser?.email,
+        safeUserKeys: mcpSafeUser ? Object.keys(mcpSafeUser) : [],
+      });
+
       config = {
         runName: 'AgentRun',
         configurable: {
@@ -857,7 +867,7 @@ class AgentClient extends BaseClient {
             conversationId: this.conversationId,
             parentMessageId: this.parentMessageId,
           },
-          user: createSafeUser(this.options.req.user),
+          user: mcpSafeUser,
         },
         recursionLimit: agentsEConfig?.recursionLimit ?? 25,
         signal: abortController.signal,
