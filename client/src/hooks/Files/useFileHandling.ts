@@ -174,6 +174,11 @@ const useFileHandling = (params?: UseFileHandling) => {
       formData.append('height', height.toString());
     }
 
+    // Add model from conversation for RAG routing
+    if (conversation?.model) {
+      formData.append('model', conversation.model);
+    }
+
     const metadata = params?.additionalMetadata ?? {};
     if (params?.additionalMetadata) {
       for (const [key, value = ''] of Object.entries(metadata)) {

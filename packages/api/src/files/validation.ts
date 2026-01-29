@@ -26,9 +26,10 @@ export async function validatePdf(
   fileSize: number,
   provider: Providers,
   configuredFileSizeLimit?: number,
+  useRAG?: boolean,
 ): Promise<PDFValidationResult> {
   if (provider === Providers.ANTHROPIC) {
-    return validateAnthropicPdf(pdfBuffer, fileSize, configuredFileSizeLimit);
+    return validateAnthropicPdf(pdfBuffer, fileSize, configuredFileSizeLimit, useRAG);
   }
 
   if (isOpenAILikeProvider(provider)) {
@@ -47,12 +48,14 @@ export async function validatePdf(
  * @param pdfBuffer - The PDF file as a buffer
  * @param fileSize - The file size in bytes
  * @param configuredFileSizeLimit - Optional configured file size limit from fileConfig (in bytes)
+ * @param useRAG - Whether RAG is being used (skips page limit validation)
  * @returns Promise that resolves to validation result
  */
 async function validateAnthropicPdf(
   pdfBuffer: Buffer,
   fileSize: number,
   configuredFileSizeLimit?: number,
+  useRAG?: boolean,
 ): Promise<PDFValidationResult> {
   try {
     const providerLimit = mbToBytes(32);
@@ -96,11 +99,30 @@ async function validateAnthropicPdf(
     const pageMatches = pdfContent.match(/\/Type[\s]*\/Page[^s]/g);
     const estimatedPages = pageMatches ? pageMatches.length : 1;
 
-    if (estimatedPages > 100) {
+    // Skip page limit check if RAG is being used (PDF will be chunked)
+    // Also skip if RAG_API_URL is configured (assumes RAG may be used)
+    const ragConfigured = process.env.RAG_API_URL != null && process.env.RAG_API_URL !== '';
+
+    console.log('🔍 [PDF Validation Debug]', {
+      estimatedPages,
+      useRAG,
+      ragConfigured,
+      RAG_API_URL: process.env.RAG_API_URL,
+      willValidate: !useRAG && !ragConfigured && estimatedPages > 100,
+    });
+
+    if (!useRAG && !ragConfigured && estimatedPages > 100) {
       return {
         isValid: false,
         error: `PDF has approximately ${estimatedPages} pages, exceeding Anthropic's 100-page limit`,
       };
+    }
+
+    // Log when large PDF is allowed due to RAG
+    if (estimatedPages > 100 && (useRAG || ragConfigured)) {
+      console.log(
+        `✅ [PDF Validation] Allowing ${estimatedPages}-page PDF (RAG enabled: ${useRAG ?? ragConfigured})`,
+      );
     }
 
     return { isValid: true };

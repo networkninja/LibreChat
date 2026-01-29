@@ -25,7 +25,7 @@ function hasExplicitConfig(
       return interfaceConfig?.memories !== undefined;
     case PermissionTypes.MULTI_CONVO:
       return interfaceConfig?.multiConvo !== undefined;
-    case PermissionTypes.DEFAULT_LAST_MODEL: 
+    case PermissionTypes.DEFAULT_LAST_MODEL:
       return interfaceConfig?.defaultLastModel !== undefined;
     case PermissionTypes.AGENTS:
       return interfaceConfig?.agents !== undefined;

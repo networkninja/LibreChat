@@ -235,8 +235,8 @@ class BaseClient {
     };
   }
 
-  createUserMessage({ messageId, parentMessageId, conversationId, text }) {
-    return {
+  createUserMessage({ messageId, parentMessageId, conversationId, text, files }) {
+    const message = {
       messageId,
       parentMessageId,
       conversationId,
@@ -244,6 +244,13 @@ class BaseClient {
       text,
       isCreatedByUser: true,
     };
+
+    // Include files if provided
+    if (files && Array.isArray(files) && files.length > 0) {
+      message.files = files;
+    }
+
+    return message;
   }
 
   async handleStartMethods(message, opts) {
@@ -265,6 +272,7 @@ class BaseClient {
           parentMessageId,
           conversationId,
           text: message,
+          files: this.options.req?.body?.files || opts.files,
         });
 
     if (typeof opts?.getReqData === 'function') {
@@ -1292,9 +1300,18 @@ class BaseClient {
         allFiles.push(file);
         continue;
       }
+      // Process embedded files with RAG context handlers
       if (file.embedded === true || file.metadata?.fileIdentifier != null) {
-        allFiles.push(file);
-        continue;
+        console.log(`[processAttachments] Processing embedded file for RAG: ${file.filename}`);
+
+        // Ensure context handlers exist
+        if (this.contextHandlers) {
+          await this.contextHandlers.processFile(file);
+        } else {
+          console.log(`[processAttachments] No context handlers available for: ${file.filename}`);
+        }
+
+        continue; // Don't add to allFiles - RAG will handle context
       }
 
       if (file.type.startsWith('image/')) {
@@ -1392,8 +1409,43 @@ class BaseClient {
         {},
       );
 
-      await this.addFileContextToMessage(message, files);
-      await this.processAttachments(message, files);
+      // Separate embedded files from regular files
+      const embeddedFiles = files.filter((file) => file.embedded === true);
+      const regularFiles = files.filter((file) => file.embedded !== true);
+
+      // Process embedded files for RAG retrieval
+      if (embeddedFiles.length > 0) {
+        console.log(
+          `📚 [addPreviousAttachments] Processing ${embeddedFiles.length} embedded files for RAG`,
+        );
+
+        // Create context handlers lazily if they don't exist yet
+        // This happens when loading previous messages with embedded files
+        if (!this.contextHandlers && this.options?.req) {
+          const { createContextHandlers } = require('./prompts');
+          // Use empty string as query since we don't have the user's new message yet
+          // The RAG system will use full document context in this case
+          this.contextHandlers = createContextHandlers(this.options.req, '');
+          console.log('🔧 [addPreviousAttachments] Created context handlers for RAG');
+        }
+
+        // If context handlers exist, use them for RAG retrieval
+        if (this.contextHandlers) {
+          for (const file of embeddedFiles) {
+            this.contextHandlers.processFile(file);
+          }
+        } else {
+          console.log('⚠️ [addPreviousAttachments] No context handlers and no req - skipping RAG');
+          // Fallback: treat as regular text extraction (won't do RAG, but better than nothing)
+          await this.addFileContextToMessage(message, embeddedFiles);
+        }
+      }
+
+      // Process regular (non-embedded) files normally
+      if (regularFiles.length > 0) {
+        console.log(`📎 [addPreviousAttachments] Processing ${regularFiles.length} regular files`);
+        await this.processAttachments(message, regularFiles);
+      }
 
       this.message_file_map[message.messageId] = files;
       return message;

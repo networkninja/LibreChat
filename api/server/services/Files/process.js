@@ -36,6 +36,7 @@ const { LB_QueueAsyncCall } = require('~/server/utils/queue');
 const { getStrategyFunctions } = require('./strategies');
 const { determineFileType } = require('~/server/utils');
 const { STTService } = require('./Audio/STTService');
+const { checkIfShouldUseRAG } = require('~/server/utils/checkRAG');
 
 /**
  * Creates a modular file upload wrapper that ensures filename sanitization
@@ -420,8 +421,30 @@ const processFileUpload = async ({ req, res, metadata }) => {
   const isAssistantUpload = isAssistantsEndpoint(metadata.endpoint);
   const assistantSource =
     metadata.endpoint === EModelEndpoint.azureAssistants ? FileSources.azure : FileSources.openai;
-  // Use the configured file strategy for regular file uploads (not vectordb)
-  const source = isAssistantUpload ? assistantSource : appConfig.fileStrategy;
+
+  // Check if this upload should use RAG/vector database
+  const shouldUseVectorDB = await checkIfShouldUseRAG({
+    req,
+    metadata,
+    appConfig,
+  });
+
+  // Determine the storage strategy:
+  // 1. Assistants use their specific storage (OpenAI/Azure)
+  // 2. RAG-enabled endpoints use vectordb
+  // 3. Everything else uses configured file strategy
+  let source;
+  if (isAssistantUpload) {
+    source = assistantSource;
+    console.log('📁 [processFileUpload] Using ASSISTANT storage:', source);
+  } else if (shouldUseVectorDB) {
+    source = FileSources.vectordb;
+    console.log('🎯 [processFileUpload] Using VECTORDB (RAG)');
+  } else {
+    source = appConfig.fileStrategy;
+    console.log('📁 [processFileUpload] Using standard storage:', source);
+  }
+
   const { handleFileUpload } = getStrategyFunctions(source);
   const { file_id, temp_file_id = null } = metadata;
 
@@ -641,12 +664,28 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
     return await createTextFile({ text, bytes, type: file.mimetype });
   }
 
+  // Check if this upload should use RAG/vector database
+  const shouldUseVectorDB =
+    tool_resource === EToolResources.file_search ||
+    (await checkIfShouldUseRAG({
+      req,
+      metadata,
+      appConfig,
+    }));
+
+  console.log(
+    `${shouldUseVectorDB ? '🎯' : '📁'} [processAgentFileUpload] shouldUseVectorDB: ${shouldUseVectorDB}`,
+  );
+  if (tool_resource === EToolResources.file_search) {
+    console.log('   → Reason: tool_resource === file_search');
+  }
+
   // Dual storage pattern for RAG files: Storage + Vector DB
   let storageResult, embeddingResult;
   const isImageFile = file.mimetype.startsWith('image');
   const source = getFileStrategy(appConfig, { isImage: isImageFile });
 
-  if (tool_resource === EToolResources.file_search) {
+  if (tool_resource === EToolResources.file_search || shouldUseVectorDB) {
     // FIRST: Upload to Storage for permanent backup (S3/local/etc.)
     const { handleFileUpload } = getStrategyFunctions(source);
     const sanitizedUploadFn = createSanitizedUploadWrapper(handleFileUpload);
@@ -686,7 +725,7 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
   let { bytes, filename, filepath: _filepath, height, width } = storageResult;
   // For RAG files, use embedding result; for others, use storage result
   let embedded = storageResult.embedded;
-  if (tool_resource === EToolResources.file_search) {
+  if (tool_resource === EToolResources.file_search || shouldUseVectorDB) {
     embedded = embeddingResult?.embedded;
     filename = embeddingResult?.filename || filename;
   }

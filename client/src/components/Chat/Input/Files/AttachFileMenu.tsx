@@ -95,7 +95,8 @@ const AttachFileMenu = ({
     } else if (fileType === 'document') {
       inputRef.current.accept = '.pdf,application/pdf';
     } else if (fileType === 'multimodal') {
-      inputRef.current.accept = 'image/*,.pdf,application/pdf';
+      inputRef.current.accept =
+        'image/*,.pdf,.txt,.md,.csv,.doc,.docx,.xls,.xlsx,application/pdf,text/plain,text/markdown,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     } else if (fileType === 'google_multimodal') {
       inputRef.current.accept = 'image/*,.pdf,application/pdf,video/*,audio/*';
     } else {
