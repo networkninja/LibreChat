@@ -77,10 +77,6 @@ const payloadParser = ({ req, agent, endpoint }) => {
       parsedValues.thinking = false;
     }
     return parsedValues;
-  } else if (endpoint === EModelEndpoint.anthropic) {
-    if (req.body.endpointOption.model_parameters.thinking) {
-      delete req.body.endpointOption.model_parameters.temperature;
-    }
   }
   return req.body.endpointOption.model_parameters;
 };
@@ -956,6 +952,32 @@ class AgentClient extends BaseClient {
 
         /** @deprecated Agent Chain */
         config.configurable.last_agent_id = agents[agents.length - 1].id;
+        if (run.Graph.boundModel?.thinking || run.Graph.clientOptions?.thinking) {
+          console.log('thinking');
+          if (!run.Graph.boundModel?.modelKwargs) {
+            run.Graph.boundModel.modelKwargs = {};
+          }
+          run.Graph.boundModel.modelKwargs.thinking = {
+            type: 'enabled',
+            budget_tokens: run.Graph.boundModels?.thinkingBudget
+              ? run.Graph.clientOptions.thinkingBudget
+              : 2000,
+          };
+          delete run.Graph.boundModel.temperature;
+        } else if (
+          run.Graph.boundModel?.reasoning_effort ||
+          run.Graph.boundModel?.reasoning ||
+          run.Graph.clientOptions?.reasoning_effort
+        ) {
+          console.log('run reasoning');
+          run.Graph.boundModel.modelKwargs.thinking = {
+            type: 'enabled',
+            budget_tokens: run.Graph.boundModels?.thinkingBudget
+              ? run.Graph.clientOptions.thinkingBudget
+              : 2000,
+          };
+          delete run.Graph.boundModel.temperature;
+        }
         await run.processStream({ messages }, config, {
           callbacks: {
             [Callback.TOOL_ERROR]: logToolError,

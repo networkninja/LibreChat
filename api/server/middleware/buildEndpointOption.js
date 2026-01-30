@@ -101,12 +101,10 @@ async function buildEndpointOption(req, res, next) {
       thinkingModelsRegex.test(req.body.model) &&
       (req.body?.thinking != false || !req.body.thinking)
     ) {
-      req.body.endpointOption.model_parameters.thinking = {
-        type: 'enabled',
-        budget_tokens: req.body.thinkingBudget
-          ?  req.body.endpointOption.model_parameters.thinkingBudget
-          : 2000,
-      };
+      req.body.endpointOption.model_parameters.thinking = true;
+      req.body.endpointOption.model_parameters.thinkingBudget = req.body.thinkingBudget
+        ? req.body.endpointOption.model_parameters.thinkingBudget
+        : 2000;
     }
 
     if (req.body.files && !isAgents) {

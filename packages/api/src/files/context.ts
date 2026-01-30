@@ -40,23 +40,8 @@ export async function extractFileContext({
 
   for (const file of attachments) {
     const source = file.source ?? FileSources.local;
-    if (source === FileSources.text && file.text) {
-      const { text: limitedText, wasTruncated } = await processTextWithTokenLimit({
-        text: file.text,
-        tokenLimit: fileTokenLimit,
-        tokenCountFn,
-      });
 
-      if (wasTruncated) {
-        logger.debug(
-          `[extractFileContext] Text content truncated for file: ${file.filename} due to token limits`,
-        );
-      }
-
-      resultText += `${!resultText ? 'Attached document(s):\n```md' : '\n\n---\n\n'}# "${file.filename}"\n${limitedText}\n`;
-    }
-    // Handle plain text files from local storage (text/plain mime type)
-    else if (source === FileSources.local && file.type === 'text/plain' && file.filepath) {
+    if (source === FileSources.local && file.filepath) {
       try {
         // Remove leading slash if present and join with process.cwd()
         const relativePath = file.filepath.startsWith('/') 
@@ -64,7 +49,6 @@ export async function extractFileContext({
           : file.filepath;
         const absolutePath = path.join(process.cwd(), relativePath);
 
-        // Read the file from local storage
         const textContent = await fs.readFile(absolutePath, 'utf-8');
         const { text: limitedText, wasTruncated } = await processTextWithTokenLimit({
           text: textContent,
@@ -80,7 +64,7 @@ export async function extractFileContext({
 
         resultText += `${!resultText ? 'Attached document(s):\n```md' : '\n\n---\n\n'}# "${file.filename}"\n${limitedText}\n`;
       } catch (error) {
-        logger.error(`[extractFileContext] Failed to read text file: ${file.filename}`, error);
+        logger.error(`[extractFileContext] ❌ Failed to read file: ${file.filename}`, error);
       }
     }
   }
