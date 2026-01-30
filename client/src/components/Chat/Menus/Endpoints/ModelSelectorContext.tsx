@@ -103,12 +103,47 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
     returnHandlers: true,
   });
 
-  // State
-  const [selectedValues, setSelectedValues] = useState<SelectedValues>({
-    endpoint: endpoint || '',
-    model: model || '',
-    modelSpec: spec || '',
+  // State - Initialize from conversation context OR localStorage
+  const [selectedValues, setSelectedValues] = useState<SelectedValues>(() => {
+    // Try to get values from conversation context first
+    let initialEndpoint = endpoint || '';
+    let initialModel = model || '';
+    let initialSpec = spec || '';
+
+    // If no conversation values, try localStorage as fallback
+    if (!initialEndpoint || !initialModel) {
+      try {
+        const lastConvoSetup = localStorage.getItem('lastConversationSetup_0');
+        if (lastConvoSetup) {
+          const parsed = JSON.parse(lastConvoSetup);
+          initialEndpoint = initialEndpoint || parsed.endpoint || '';
+          initialModel = initialModel || parsed.model || '';
+          initialSpec = initialSpec || parsed.spec || '';
+        }
+      } catch (e) {
+        console.error('Failed to parse lastConversationSetup from localStorage:', e);
+      }
+    }
+
+    return {
+      endpoint: initialEndpoint,
+      model: initialModel,
+      modelSpec: initialSpec,
+    };
   });
+
+  // Debug: Log when conversation changes
+  React.useEffect(() => {
+    console.log('🔍 [ModelSelectorContext] Conversation changed:', {
+      endpoint,
+      model,
+      spec,
+      agent_id,
+      assistant_id,
+      conversation,
+    });
+  }, [endpoint, model, spec, agent_id, assistant_id, conversation]);
+
   useSelectorEffects({
     agentsMap,
     conversation: endpoint

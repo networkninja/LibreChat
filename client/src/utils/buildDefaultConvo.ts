@@ -97,6 +97,11 @@ const buildDefaultConvo = ({
 
   defaultConvo.tools = lastConversationSetup?.tools ?? lastSelectedTools ?? defaultConvo.tools;
 
+  const lastSelectedSpec = localStorage.getItem(LocalStorageKeys.LAST_SPEC);
+  if (!lastSelectedSpec) {
+    defaultConvo.spec = '';
+  }
+
   return defaultConvo;
 };
 

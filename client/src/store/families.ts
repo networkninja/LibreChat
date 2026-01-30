@@ -96,6 +96,8 @@ const conversationByIndex = atomFamily<TConversation | null, string | number>({
         }
         if (newValue?.spec != null && newValue.spec) {
           localStorage.setItem(LocalStorageKeys.LAST_SPEC, newValue.spec);
+        } else if (newValue?.spec === '') {
+          localStorage.removeItem(LocalStorageKeys.LAST_SPEC);
         }
         if (newValue?.tools && Array.isArray(newValue.tools)) {
           localStorage.setItem(
