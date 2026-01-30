@@ -84,7 +84,15 @@ const conversationByIndex = atomFamily<TConversation | null, string | number>({
           );
         }
         if (newValue?.agent_id != null && newValue.agent_id) {
-          localStorage.setItem(`${LocalStorageKeys.AGENT_ID_PREFIX}${index}`, newValue.agent_id);
+          // Don't save ephemeral agent IDs to localStorage - only save actual saved agents
+          const isEphemeral =
+            newValue.agent_id === '' || newValue.agent_id === Constants.EPHEMERAL_AGENT_ID;
+          if (!isEphemeral) {
+            localStorage.setItem(`${LocalStorageKeys.AGENT_ID_PREFIX}${index}`, newValue.agent_id);
+          } else {
+            // Clear any previously saved agent_id when switching to ephemeral
+            localStorage.removeItem(`${LocalStorageKeys.AGENT_ID_PREFIX}${index}`);
+          }
         }
         if (newValue?.spec != null && newValue.spec) {
           localStorage.setItem(LocalStorageKeys.LAST_SPEC, newValue.spec);
@@ -101,9 +109,19 @@ const conversationByIndex = atomFamily<TConversation | null, string | number>({
         }
 
         storeEndpointSettings(newValue);
+
+        // When saving LAST_CONVO_SETUP, check if agent_id should be excluded
+        let convoToSave = newValue;
+        const isEphemeral =
+          newValue.agent_id === '' || newValue.agent_id === Constants.EPHEMERAL_AGENT_ID;
+        if (isEphemeral) {
+          // Don't save agent_id in LAST_CONVO_SETUP for ephemeral agents
+          convoToSave = { ...newValue, agent_id: '' };
+        }
+
         localStorage.setItem(
           `${LocalStorageKeys.LAST_CONVO_SETUP}_${index}`,
-          JSON.stringify(newValue),
+          JSON.stringify(convoToSave),
         );
 
         const disableParams = newValue.disableParams === true;

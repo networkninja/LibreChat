@@ -156,9 +156,27 @@ const useNewConvo = (index = 0) => {
           // When false, use the active preset (which could be null, allowing fallback to localStorage)
           let lastConversationSetup: TConversation | null = null;
 
-          if (!useDefaultLastModel && activePreset) {
-            // Use active preset when useDefaultLastModel is false
+          if (activePreset) {
+            // User actively selected something - use it
             lastConversationSetup = activePreset as TConversation;
+            console.log('Using active preset (user selection):', activePreset);
+          } else if (useDefaultLastModel) {
+            // No preset, but useDefaultLastModel is true - load from localStorage
+            try {
+              const savedConvo = localStorage.getItem(
+                `${LocalStorageKeys.LAST_CONVO_SETUP}_${index}`,
+              );
+              if (savedConvo) {
+                lastConversationSetup = JSON.parse(savedConvo) as TConversation;
+                console.log('Loaded LAST_CONVO_SETUP from localStorage:', lastConversationSetup);
+              } else {
+                lastConversationSetup = null;
+                console.log('No LAST_CONVO_SETUP found, will fall back to lastSelectedModel');
+              }
+            } catch (e) {
+              console.error('Failed to parse LAST_CONVO_SETUP:', e);
+              lastConversationSetup = null;
+            }
           } else {
             // Pass null to allow fallback to localStorage's lastSelectedModel
             lastConversationSetup = null;

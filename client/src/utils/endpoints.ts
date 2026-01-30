@@ -7,6 +7,7 @@ import {
   getEndpointField,
   isAgentsEndpoint,
   isAssistantsEndpoint,
+  PermissionTypes,
 } from 'librechat-data-provider';
 import type * as t from 'librechat-data-provider';
 import type { LocalizeFunction, IconsRecord } from '~/common';
@@ -209,17 +210,25 @@ export function getDefaultModelSpec(startupConfig?: t.TStartupConfig):
   if (!list) {
     return;
   }
-  const defaultSpec = list?.find((spec) => spec.default);
-  if (prioritize === true || !interfaceConfig?.modelSelect) {
-    const lastSelectedSpecName = localStorage.getItem(LocalStorageKeys.LAST_SPEC);
-    const lastSelectedSpec = list?.find((spec) => spec.name === lastSelectedSpecName);
-    return { default: defaultSpec || lastSelectedSpec || list?.[0] };
-  } else if (defaultSpec) {
-    return { default: defaultSpec };
-  }
   const lastConversationSetup = JSON.parse(
     localStorage.getItem(LocalStorageKeys.LAST_CONVO_SETUP + '_0') ?? '{}',
   );
+  const defaultSpec = list?.find((spec) => spec.default);
+  if (
+    prioritize === true ||
+    !interfaceConfig?.modelSelect ||
+    (lastConversationSetup.spec !== null && PermissionTypes.DEFAULT_LAST_MODEL)
+  ) {
+    const lastSelectedSpecName = localStorage.getItem(LocalStorageKeys.LAST_SPEC);
+    const lastSelectedSpec = list?.find((spec) => spec.name === lastSelectedSpecName);
+    return { default: defaultSpec || lastSelectedSpec || list?.[0] };
+  } else if (
+    defaultSpec &&
+    lastConversationSetup.spec === null &&
+    PermissionTypes.DEFAULT_LAST_MODEL
+  ) {
+    return { default: defaultSpec };
+  }
   if (!lastConversationSetup.spec) {
     return;
   }

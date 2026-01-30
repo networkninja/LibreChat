@@ -160,6 +160,15 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
     } else if (isAssistantsEndpoint(spec.preset.endpoint)) {
       model = spec.preset.assistant_id ?? '';
     }
+
+    // Save to localStorage immediately when user selects a model spec
+    if (model && spec.preset.endpoint) {
+      const lastModel = JSON.parse(localStorage.getItem('lastSelectedModel') ?? '{}');
+      lastModel[spec.preset.endpoint] = model;
+      localStorage.setItem('lastSelectedModel', JSON.stringify(lastModel));
+      console.log('🔍 [handleSelectSpec] Saved to localStorage:', lastModel);
+    }
+
     setSelectedValues({
       endpoint: spec.preset.endpoint,
       model,
@@ -181,19 +190,51 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
   };
 
   const handleSelectModel = (endpoint: Endpoint, model: string) => {
+    let modelToSave = model;
     if (isAgentsEndpoint(endpoint.value)) {
-      onSelectEndpoint?.(endpoint.value, {
-        agent_id: model,
-        model: agentsMap?.[model]?.model ?? '',
+      // Check if this is a saved agent ID or a direct model selection
+      const agentData = agentsMap?.[model];
+      if (agentData) {
+        // This is a saved agent (with or without explicit model)
+        // For agents, the backend determines the model from agent config
+        // So we pass the agent_id and let the backend handle the model
+        modelToSave = agentData.model || ''; // Use agent's model if available, else empty
+        console.log(
+          '🔍 [handleSelectModel] Saved agent selected, model:',
+          modelToSave || 'determined by agent config',
+        );
+        onSelectEndpoint?.(endpoint.value, {
+          agent_id: model,
+          model: modelToSave,
+        });
+      } else {
+        // This is a direct model selection for ephemeral agent
+        modelToSave = model;
+        onSelectEndpoint?.(endpoint.value, {
+          model: modelToSave,
+          agent_id: '', // Explicitly clear agent_id for ephemeral agents
       });
+      }
     } else if (isAssistantsEndpoint(endpoint.value)) {
+      // For assistants, save the assistant's underlying model
+      modelToSave = assistantsMap?.[endpoint.value]?.[model]?.model ?? model;
       onSelectEndpoint?.(endpoint.value, {
         assistant_id: model,
-        model: assistantsMap?.[endpoint.value]?.[model]?.model ?? '',
+        model: modelToSave,
       });
     } else if (endpoint.value) {
       onSelectEndpoint?.(endpoint.value, { model });
     }
+
+    // Save the actual model (not agent_id/assistant_id) to localStorage
+    const lastModel = JSON.parse(localStorage.getItem('lastSelectedModel') ?? '{}');
+    lastModel[endpoint.value] = modelToSave;
+    localStorage.setItem('lastSelectedModel', JSON.stringify(lastModel));
+
+    // Save a timestamp to prevent storeEndpointSettings from overwriting this selection
+    localStorage.setItem('lastModelSelectionTime', Date.now().toString());
+    console.log('🔍 [handleSelectModel] Saved to localStorage:', lastModel);
+
     setSelectedValues({
       endpoint: endpoint.value,
       model,

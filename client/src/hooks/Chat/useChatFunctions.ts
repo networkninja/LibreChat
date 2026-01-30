@@ -29,6 +29,7 @@ import store, { useGetEphemeralAgent } from '~/store';
 import useUserKey from '~/hooks/Input/useUserKey';
 import { useNavigate } from 'react-router-dom';
 import { useAuthContext } from '~/hooks';
+import { updateLastSelectedModel } from '~/utils/endpoints';
 import { logger } from '~/utils';
 
 const logChatRequest = (request: Record<string, unknown>) => {
@@ -177,6 +178,18 @@ export default function useChatFunctions({
       conversation: conversation ?? {},
     });
 
+    // Update localStorage with the selected model for this endpoint
+    if (convo?.model && endpoint) {
+      console.log('🔍 [useChatFunctions] Updating lastSelectedModel:', {
+        endpoint,
+        model: convo.model,
+      });
+      updateLastSelectedModel({
+        endpoint,
+        model: convo.model,
+      });
+    }
+
     const { modelDisplayLabel } = endpointsConfig?.[endpoint ?? ''] ?? {};
     const endpointOption = Object.assign(
       {
@@ -206,6 +219,7 @@ export default function useChatFunctions({
       messageId: isContinued && messageId != null && messageId ? messageId : intermediateId,
       thread_id,
       error: false,
+      // extraSystemInstructions: systemInstructions ?? undefined,
     };
 
     const submissionFiles = overrideFiles ?? targetParentMessage?.files;

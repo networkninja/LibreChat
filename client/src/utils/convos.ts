@@ -306,11 +306,17 @@ export function storeEndpointSettings(conversation: TConversation | null) {
   if (!conversation) {
     return;
   }
-  const { endpoint, model, agentOptions } = conversation;
+  const { endpoint, model, agentOptions, conversationId } = conversation;
   if (!endpoint) {
     return;
   }
+  // Get the current lastSelectedModel from localStorage
   const lastModel = JSON.parse(localStorage.getItem(LocalStorageKeys.LAST_MODEL) ?? '{}');
+  // If the model is already set to what we're trying to save, skip (prevents unnecessary updates)
+  if (lastModel[endpoint] === model) {
+    console.log('🔍 [storeEndpointSettings] Model unchanged, skipping save');
+    return;
+  }
   lastModel[endpoint] = model;
   if (endpoint === EModelEndpoint.gptPlugins) {
     lastModel.secondaryModel = agentOptions?.model ?? model ?? '';

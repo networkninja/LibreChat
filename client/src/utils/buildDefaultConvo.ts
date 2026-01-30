@@ -69,6 +69,9 @@ const buildDefaultConvo = ({
     endpointType,
     endpoint,
   };
+  if (isAgentsEndpoint(endpoint) && lastConversationSetup?.model) {
+    defaultConvo.model = lastConversationSetup.model;
+  }
 
   // Ensures assistant_id is always defined
   const assistantId = convo?.assistant_id ?? conversation?.assistant_id ?? '';
@@ -78,14 +81,17 @@ const buildDefaultConvo = ({
   }
 
   // Ensures agent_id is always defined
-  const agentId = convo?.agent_id ?? conversation?.agent_id ?? '';
-  const defaultAgentId = lastConversationSetup?.agent_id ?? '';
-  const lastSelectedAgentId = localStorage.getItem(`${LocalStorageKeys.AGENT_ID_PREFIX}${index}`) ?? '';
-  
+  const lastSelectedAgentId =
+    localStorage.getItem(`${LocalStorageKeys.AGENT_ID_PREFIX}${index}`) ?? '';
+  const setupAgentId = lastConversationSetup?.agent_id ?? '';
+
   if (isAgentsEndpoint(endpoint)) {
-    if (!defaultAgentId && (agentId || lastSelectedAgentId)) {
-      // Use agent from convo, or fall back to last selected agent from localStorage
-      defaultConvo.agent_id = agentId || lastSelectedAgentId;
+    if (lastConversationSetup != null && 'agent_id' in lastConversationSetup) {
+      defaultConvo.agent_id = setupAgentId;
+    } else if (lastSelectedAgentId) {
+      defaultConvo.agent_id = lastSelectedAgentId;
+    } else {
+      defaultConvo.agent_id = '';
     }
   }
 
