@@ -99,7 +99,7 @@ const useNewConvo = (index = 0) => {
             activePreset.presetId === defaultPreset?.presetId);
         if (buildDefaultConversation) {
           let defaultEndpoint = getDefaultEndpoint({
-            convoSetup: useDefaultLastModel ? conversation : (activePreset ?? conversation),
+            convoSetup: activePreset ?? conversation,
             endpointsConfig,
           });
 
@@ -180,10 +180,17 @@ const useNewConvo = (index = 0) => {
           } else {
             // Pass null to allow fallback to localStorage's lastSelectedModel
             lastConversationSetup = null;
+            console.log('No preset, will fall back to localStorage lastSelectedModel');
           }
+
+          console.log('Default Model Spec', defaultModelSpec);
+          console.log('Active Preset', activePreset);
+          console.log('Last Conversation Setup:', lastConversationSetup);
+          console.log('Will use default model spec:', useDefaultLastModel);
+
           conversation = buildDefaultConvo({
             conversation,
-            lastConversationSetup: activePreset as TConversation,
+            lastConversationSetup: lastConversationSetup ?? (activePreset as TConversation),
             endpoint: defaultEndpoint,
             models,
             index,
