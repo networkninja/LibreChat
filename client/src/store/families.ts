@@ -113,18 +113,25 @@ const conversationByIndex = atomFamily<TConversation | null, string | number>({
         storeEndpointSettings(newValue);
 
         // When saving LAST_CONVO_SETUP, check if agent_id should be excluded
+        // Also, don't save modelSpec presets to avoid overriding user's last selected model
         let convoToSave = newValue;
         const isEphemeral =
           newValue.agent_id === '' || newValue.agent_id === Constants.EPHEMERAL_AGENT_ID;
+        const isModelSpecPreset = newValue.spec != null && newValue.spec !== '';
+
         if (isEphemeral) {
           // Don't save agent_id in LAST_CONVO_SETUP for ephemeral agents
           convoToSave = { ...newValue, agent_id: '' };
         }
 
-        localStorage.setItem(
-          `${LocalStorageKeys.LAST_CONVO_SETUP}_${index}`,
-          JSON.stringify(convoToSave),
-        );
+        // Don't save to LAST_CONVO_SETUP if this is a modelSpec conversation
+        // This allows defaultLastModel to work correctly after using a modelSpec
+        if (!isModelSpecPreset) {
+          localStorage.setItem(
+            `${LocalStorageKeys.LAST_CONVO_SETUP}_${index}`,
+            JSON.stringify(convoToSave),
+          );
+        }
 
         const disableParams = newValue.disableParams === true;
         const shouldUpdateParams =
