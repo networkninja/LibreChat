@@ -97,11 +97,13 @@ const buildDefaultConvo = ({
 
   defaultConvo.tools = lastConversationSetup?.tools ?? lastSelectedTools ?? defaultConvo.tools;
 
-  // Preserve spec from lastConversationSetup (preset), or fall back to localStorage
-  // Only clear spec if neither source has one
   if (lastConversationSetup?.spec) {
+    // Has a modelSpec - use it
     defaultConvo.spec = lastConversationSetup.spec;
-  } else if (!defaultConvo.spec) {
+  } else if (lastConversationSetup && 'spec' in lastConversationSetup) {
+    defaultConvo.spec = '';
+  } else {
+    // No spec info in lastConversationSetup - fall back to localStorage for new conversations
     const lastSelectedSpec = localStorage.getItem(LocalStorageKeys.LAST_SPEC);
     defaultConvo.spec = lastSelectedSpec || '';
   }

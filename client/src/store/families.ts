@@ -96,7 +96,7 @@ const conversationByIndex = atomFamily<TConversation | null, string | number>({
         }
         if (newValue?.spec != null && newValue.spec) {
           localStorage.setItem(LocalStorageKeys.LAST_SPEC, newValue.spec);
-        } else if (newValue?.spec === '') {
+        } else if (newValue?.spec === '' && oldValue && (oldValue as TConversation)?.spec) {
           localStorage.removeItem(LocalStorageKeys.LAST_SPEC);
         }
         if (newValue?.tools && Array.isArray(newValue.tools)) {
@@ -124,8 +124,6 @@ const conversationByIndex = atomFamily<TConversation | null, string | number>({
           convoToSave = { ...newValue, agent_id: '' };
         }
 
-        // Don't save to LAST_CONVO_SETUP if this is a modelSpec conversation
-        // This allows defaultLastModel to work correctly after using a modelSpec
         if (!isModelSpecPreset) {
           localStorage.setItem(
             `${LocalStorageKeys.LAST_CONVO_SETUP}_${index}`,

@@ -213,26 +213,33 @@ export function getDefaultModelSpec(startupConfig?: t.TStartupConfig):
   const lastConversationSetup = JSON.parse(
     localStorage.getItem(LocalStorageKeys.LAST_CONVO_SETUP + '_0') ?? '{}',
   );
+  const lastSelectedSpecName = localStorage.getItem(LocalStorageKeys.LAST_SPEC);
   const defaultSpec = list?.find((spec) => spec.default);
+
+  // Branch 1: Check if lastConversationSetup has a spec (modelSpec was explicitly saved)
+  if (lastConversationSetup.spec) {
+    const foundSpec = list?.find((spec) => spec.name === lastConversationSetup.spec);
+    console.log('Branch 1: Using spec from lastConversationSetup:', foundSpec?.name);
+    return { last: foundSpec };
+  }
+
+  // Branch 2: Check LAST_SPEC from localStorage (for new conversations after modelSpec selection)
+  if (lastSelectedSpecName) {
+    const lastSelectedSpec = list?.find((spec) => spec.name === lastSelectedSpecName);
+    console.log('Branch 2: Using lastSelectedSpec from LAST_SPEC:', lastSelectedSpec?.name);
+    return { last: lastSelectedSpec };
+  }
+
+  // Branch 3: Use default spec or prioritize/enforce mode
   if (
     prioritize === true ||
     !interfaceConfig?.modelSelect ||
-    (lastConversationSetup.spec !== null && PermissionTypes.DEFAULT_LAST_MODEL)
+    (defaultSpec && PermissionTypes.DEFAULT_LAST_MODEL)
   ) {
-    const lastSelectedSpecName = localStorage.getItem(LocalStorageKeys.LAST_SPEC);
-    const lastSelectedSpec = list?.find((spec) => spec.name === lastSelectedSpecName);
-    return { default: defaultSpec || lastSelectedSpec || list?.[0] };
-  } else if (
-    defaultSpec &&
-    lastConversationSetup.spec === null &&
-    PermissionTypes.DEFAULT_LAST_MODEL
-  ) {
-    return { default: defaultSpec };
+    console.log('Branch 3: Using defaultSpec or first spec:', defaultSpec?.name || list?.[0]?.name);
+    return { default: defaultSpec || list?.[0] };
   }
-  if (!lastConversationSetup.spec) {
-    return;
-  }
-  return { last: list?.find((spec) => spec.name === lastConversationSetup.spec) };
+  return;
 }
 
 export function getModelSpecPreset(modelSpec?: t.TModelSpec) {

@@ -196,14 +196,6 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
       model = spec.preset.assistant_id ?? '';
     }
 
-    // Save to localStorage immediately when user selects a model spec
-    if (model && spec.preset.endpoint) {
-      const lastModel = JSON.parse(localStorage.getItem('lastSelectedModel') ?? '{}');
-      lastModel[spec.preset.endpoint] = model;
-      localStorage.setItem('lastSelectedModel', JSON.stringify(lastModel));
-      console.log('🔍 [handleSelectSpec] Saved to localStorage:', lastModel);
-    }
-
     setSelectedValues({
       endpoint: spec.preset.endpoint,
       model,
