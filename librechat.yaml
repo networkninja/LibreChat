@@ -12,13 +12,14 @@
 version: 1.2.8
 cache: true
 
-# MCP Settings - Required for internal Service Connect hostnames
-# LibreChat's SSRF protection blocks internal hostnames by default
-# See: https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/mcp_settings
-mcpSettings:
-  allowedDomains:
-    - "collaborate-saas-mcp-bridge"   # MCP Bridge Service Connect hostname
-    - "collaborate-web"               # Django Web Service Connect hostname
+# NOTE: mcpSettings.allowedDomains is needed for SSRF protection in v0.8.2+
+# but is NOT a valid schema key in v0.8.1. Adding it causes strict schema
+# validation to reject the ENTIRE config (endpoints, models, registration, etc).
+# Re-add when upgrading to v0.8.2+:
+#   mcpSettings:
+#     allowedDomains:
+#       - "collaborate-saas-mcp-bridge"
+#       - "collaborate-web"
 
 # Interface configuration
 interface:
