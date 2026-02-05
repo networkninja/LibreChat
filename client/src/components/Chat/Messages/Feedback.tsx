@@ -300,42 +300,44 @@ export default function Feedback({
       </button>
     );
   };
+  // // remove feedback feature to avoinf user confusion
 
-  return (
-    <>
-      {feedback ? (
-        renderSingleFeedbackButton()
-      ) : (
-        <FeedbackButtons
-          isLast={isLast}
-          feedback={feedback}
-          onFeedback={handleButtonFeedback}
-          onOther={handleOtherOpen}
-        />
-      )}
-      <OGDialog open={openDialog} onOpenChange={setOpenDialog}>
-        <OGDialogContent className="w-11/12 max-w-lg">
-          <OGDialogTitle className="text-token-text-primary text-lg font-semibold leading-6">
-            {localize('com_ui_feedback_more_information')}
-          </OGDialogTitle>
-          <textarea
-            className="w-full rounded-xl border border-border-light bg-transparent p-2 text-text-primary"
-            value={feedback?.text || ''}
-            onChange={handleTextChange}
-            rows={4}
-            placeholder={localize('com_ui_feedback_placeholder')}
-            maxLength={500}
-          />
-          <div className="mt-4 flex items-end justify-end gap-2">
-            <Button variant="destructive" onClick={handleDialogClear}>
-              {localize('com_ui_delete')}
-            </Button>
-            <Button variant="submit" onClick={handleDialogSave} disabled={!feedback?.text?.trim()}>
-              {localize('com_ui_save')}
-            </Button>
-          </div>
-        </OGDialogContent>
-      </OGDialog>
-    </>
-  );
+  // return (
+  //   <>
+  //     {feedback ? (
+  //       renderSingleFeedbackButton()
+  //     ) : (
+  //       <FeedbackButtons
+  //         isLast={isLast}
+  //         feedback={feedback}
+  //         onFeedback={handleButtonFeedback}
+  //         onOther={handleOtherOpen}
+  //       />
+  //     )}
+  //     <OGDialog open={openDialog} onOpenChange={setOpenDialog}>
+  //       <OGDialogContent className="w-11/12 max-w-lg">
+  //         <OGDialogTitle className="text-token-text-primary text-lg font-semibold leading-6">
+  //           {localize('com_ui_feedback_more_information')}
+  //         </OGDialogTitle>
+  //         <textarea
+  //           className="w-full rounded-xl border border-border-light bg-transparent p-2 text-text-primary"
+  //           value={feedback?.text || ''}
+  //           onChange={handleTextChange}
+  //           rows={4}
+  //           placeholder={localize('com_ui_feedback_placeholder')}
+  //           maxLength={500}
+  //         />
+  //         <div className="mt-4 flex items-end justify-end gap-2">
+  //           <Button variant="destructive" onClick={handleDialogClear}>
+  //             {localize('com_ui_delete')}
+  //           </Button>
+  //           <Button variant="submit" onClick={handleDialogSave} disabled={!feedback?.text?.trim()}>
+  //             {localize('com_ui_save')}
+  //           </Button>
+  //         </div>
+  //       </OGDialogContent>
+  //     </OGDialog>
+  //   </>
+  // );
+  return null;
 }
