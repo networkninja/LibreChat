@@ -94,9 +94,18 @@ const conversationByIndex = atomFamily<TConversation | null, string | number>({
             localStorage.removeItem(`${LocalStorageKeys.AGENT_ID_PREFIX}${index}`);
           }
         }
-        if (newValue?.spec != null && newValue.spec) {
-          localStorage.setItem(LocalStorageKeys.LAST_SPEC, newValue.spec);
-        } else if (newValue?.spec === '' && oldValue && (oldValue as TConversation)?.spec) {
+        // Only save spec to LAST_SPEC when it's explicitly changed by the user, not when loading an existing conversation
+        const oldSpec = (oldValue as TConversation)?.spec;
+        const newSpec = newValue?.spec;
+        if (newSpec != null && newSpec !== '' && oldSpec !== newSpec) {
+          // Only save if there was a previous value (meaning user changed it) OR if it's a new conversation
+          const isNewConversation =
+            !oldValue || (oldValue as TConversation)?.conversationId === Constants.NEW_CONVO;
+          if (oldValue && !isNewConversation) {
+            // User changed the spec in an existing conversation
+            localStorage.setItem(LocalStorageKeys.LAST_SPEC, newSpec);
+          }
+        } else if (newSpec === '' && oldSpec) {
           localStorage.removeItem(LocalStorageKeys.LAST_SPEC);
         }
         if (newValue?.tools && Array.isArray(newValue.tools)) {
@@ -112,8 +121,6 @@ const conversationByIndex = atomFamily<TConversation | null, string | number>({
 
         storeEndpointSettings(newValue);
 
-        // When saving LAST_CONVO_SETUP, check if agent_id should be excluded
-        // Also, don't save modelSpec presets to avoid overriding user's last selected model
         let convoToSave = newValue;
         const isEphemeral =
           newValue.agent_id === '' || newValue.agent_id === Constants.EPHEMERAL_AGENT_ID;

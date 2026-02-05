@@ -319,11 +319,13 @@ export const parseCompactConvo = ({
   endpointType,
   conversation,
   possibleValues,
+  preserveIconURL = false,
 }: {
   endpoint?: EndpointSchemaKey;
   endpointType?: EndpointSchemaKey | null;
   conversation: Partial<s.TConversation | s.TPreset>;
   possibleValues?: TPossibleValues;
+  preserveIconURL?: boolean;
   // TODO: POC for default schema
   // defaultSchema?: Partial<EndpointSchema>,
 }): Omit<s.TConversation, 'iconURL'> | null => {
@@ -345,6 +347,8 @@ export const parseCompactConvo = ({
 
   // Strip iconURL from input before parsing - it should only be derived server-side
   // from model spec configuration, not accepted from client requests
+  // UNLESS preserveIconURL is true (e.g., when receiving server responses)
+  const iconURLFromServer = preserveIconURL ? conversation.iconURL : undefined;
   const { iconURL: _clientIconURL, ...conversationWithoutIconURL } = conversation;
 
   const convo = schema.parse(conversationWithoutIconURL) as s.TConversation | null;
@@ -353,6 +357,11 @@ export const parseCompactConvo = ({
 
   if (models && convo) {
     convo.model = getFirstDefinedValue(models) ?? convo.model;
+  }
+
+  // Restore iconURL if preserveIconURL is true (server-provided value)
+  if (preserveIconURL && iconURLFromServer != null && convo) {
+    (convo as s.TConversation & { iconURL?: string | null }).iconURL = iconURLFromServer;
   }
 
   // if (secondaryModels && convo.agentOptions) {

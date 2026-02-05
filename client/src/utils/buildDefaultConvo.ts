@@ -40,8 +40,13 @@ const buildDefaultConvo = ({
       : null;
 
   let possibleModels: string[], secondaryModels: string[];
+  const hasModelSpec = lastConversationSetup?.spec != null && lastConversationSetup.spec !== '';
 
-  if (availableModels.includes(model)) {
+  if (hasModelSpec && model) {
+    // Model spec is active - prioritize its model
+    possibleModels = [model, ...availableModels.filter((m) => m !== model)];
+    console.log('🔍 [buildDefaultConvo] Using model spec model:', model);
+  } else if (availableModels.includes(model)) {
     possibleModels = [model, ...availableModels];
   } else {
     possibleModels = [...availableModels];

@@ -43,10 +43,9 @@ async function buildEndpointOption(req, res, next) {
     return handleError(res, { text: 'Error parsing conversation' });
   }
 
-  const appConfig = req.config;
-  if (appConfig.modelSpecs?.list && appConfig.modelSpecs?.enforce) {
+  if (req.app.locals.modelSpecs?.list && req.app.locals.modelSpecs?.enforce) {
     /** @type {{ list: TModelSpec[] }}*/
-    const { list } = appConfig.modelSpecs;
+    const { list } = req.app.locals.modelSpecs;
     const { spec } = parsedBody;
 
     if (!spec) {
@@ -64,23 +63,22 @@ async function buildEndpointOption(req, res, next) {
 
     try {
       currentModelSpec.preset.spec = spec;
+      if (currentModelSpec.iconURL != null && currentModelSpec.iconURL !== '') {
+        currentModelSpec.preset.iconURL = currentModelSpec.iconURL;
+      }
+      // Preserve user's selected model if present
+      if (req.body.model) {
+        currentModelSpec.preset.model = req.body.model;
+      }
       parsedBody = parseCompactConvo({
         endpoint,
         endpointType,
         conversation: currentModelSpec.preset,
+        preserveIconURL: true,
       });
-      if (currentModelSpec.iconURL != null && currentModelSpec.iconURL !== '') {
-        parsedBody.iconURL = currentModelSpec.iconURL;
-      }
     } catch (error) {
       logger.error(`Error parsing model spec for endpoint ${endpoint}`, error);
       return handleError(res, { text: 'Error parsing model spec' });
-    }
-  } else if (parsedBody.spec && appConfig.modelSpecs?.list) {
-    // Non-enforced mode: if spec is selected, derive iconURL from model spec
-    const modelSpec = appConfig.modelSpecs.list.find((s) => s.name === parsedBody.spec);
-    if (modelSpec?.iconURL) {
-      parsedBody.iconURL = modelSpec.iconURL;
     }
   }
 
@@ -96,7 +94,7 @@ async function buildEndpointOption(req, res, next) {
 
     if (thinkingModelsRegex.test(req.body.model) && req.body?.reasoning_effort) {
       req.body.endpointOption.model_parameters.reasoning_effort =
-        req.body.endpointOption.model_parameters.reasoning_effort ?? req.body.reasoning_effort;    
+        req.body.endpointOption.model_parameters.reasoning_effort ?? req.body.reasoning_effort;
     } else if (
       thinkingModelsRegex.test(req.body.model) &&
       (req.body?.thinking != false || !req.body.thinking)
@@ -104,7 +102,7 @@ async function buildEndpointOption(req, res, next) {
       req.body.endpointOption.model_parameters.thinking = {
         type: 'enabled',
         budget_tokens: req.body.thinkingBudget
-          ?  req.body.endpointOption.model_parameters.thinkingBudget
+          ? req.body.endpointOption.model_parameters.thinkingBudget
           : 2000,
       };
     }

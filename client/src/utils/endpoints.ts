@@ -206,40 +206,52 @@ export function getDefaultModelSpec(startupConfig?: t.TStartupConfig):
     }
   | undefined {
   const { modelSpecs, interface: interfaceConfig } = startupConfig ?? {};
-  const { list, prioritize } = modelSpecs ?? {};
-  if (!list) {
+  const { list, prioritize, enforce } = modelSpecs ?? {};
+  if (!list || list.length === 0) {
     return;
   }
+  const defaultSpec = list?.find((spec) => spec.default);
+  const lastSelectedSpecName = localStorage.getItem(LocalStorageKeys.LAST_SPEC);
   const lastConversationSetup = JSON.parse(
     localStorage.getItem(LocalStorageKeys.LAST_CONVO_SETUP + '_0') ?? '{}',
   );
-  const lastSelectedSpecName = localStorage.getItem(LocalStorageKeys.LAST_SPEC);
-  const defaultSpec = list?.find((spec) => spec.default);
 
-  // Branch 1: Check if lastConversationSetup has a spec (modelSpec was explicitly saved)
-  if (lastConversationSetup.spec) {
-    const foundSpec = list?.find((spec) => spec.name === lastConversationSetup.spec);
-    console.log('Branch 1: Using spec from lastConversationSetup:', foundSpec?.name);
-    return { last: foundSpec };
+  // If prioritize is true, enforce is true, or model selection is disabled, use default or first spec
+  if (prioritize === true || enforce === true || !interfaceConfig?.modelSelect) {
+    const lastSelectedSpec = list?.find((spec) => spec.name === lastSelectedSpecName);
+    return { default: defaultSpec || lastSelectedSpec || list?.[0] };
   }
 
   // Branch 2: Check LAST_SPEC from localStorage (for new conversations after modelSpec selection)
   if (lastSelectedSpecName) {
     const lastSelectedSpec = list?.find((spec) => spec.name === lastSelectedSpecName);
-    console.log('Branch 2: Using lastSelectedSpec from LAST_SPEC:', lastSelectedSpec?.name);
-    return { last: lastSelectedSpec };
+    if (lastSelectedSpec) {
+      console.log('🔍 [getDefaultModelSpec] Using last selected spec:', lastSelectedSpec.name);
+      return { last: lastSelectedSpec };
+  }
   }
 
-  // Branch 3: Use default spec or prioritize/enforce mode
-  if (
-    prioritize === true ||
-    !interfaceConfig?.modelSelect ||
-    (defaultSpec && PermissionTypes.DEFAULT_LAST_MODEL)
-  ) {
-    console.log('Branch 3: Using defaultSpec or first spec:', defaultSpec?.name || list?.[0]?.name);
-    return { default: defaultSpec || list?.[0] };
+  // Check last conversation setup
+  if (lastConversationSetup.spec) {
+    const foundSpec = list?.find((spec) => spec.name === lastConversationSetup.spec);
+    if (foundSpec) {
+      console.log(
+        '🔍 [getDefaultModelSpec] Using spec from lastConversationSetup:',
+        foundSpec.name,
+      );
+      return { last: foundSpec };
+    }
   }
-  return;
+
+  // If there's a default spec, use it
+  if (defaultSpec) {
+    console.log('🔍 [getDefaultModelSpec] Using default spec:', defaultSpec.name);
+    return { default: defaultSpec };
+  }
+
+  // Otherwise, always use the first spec in the list (on login with no history)
+  console.log('🔍 [getDefaultModelSpec] No history found, using first spec:', list[0].name);
+  return { default: list[0] };
 }
 
 export function getModelSpecPreset(modelSpec?: t.TModelSpec) {

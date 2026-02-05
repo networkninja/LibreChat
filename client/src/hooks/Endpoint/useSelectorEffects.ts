@@ -121,5 +121,6 @@ export default function useSelectorEffects({
     conversation?.endpoint,
     conversation?.agent_id,
     conversation?.assistant_id,
+    debouncedSetSelectedValues,
   ]);
 }

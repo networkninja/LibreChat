@@ -555,13 +555,21 @@ export default function useEventHandlers({
             genTitle.mutate({ conversationId: conversation.conversationId as string });
           }, 2500);
         }
-
         if (setConversation && isAddedRequest !== true) {
           setConversation((prevState) => {
             const update = {
               ...prevState,
               ...(conversation as TConversation),
             };
+
+            // Preserve iconURL from prevState if not in incoming conversation
+            if (prevState?.iconURL && !conversation.iconURL) {
+              console.log(
+                '⚠️ [finalHandler] iconURL missing from backend response, preserving from prevState',
+              );
+              update.iconURL = prevState.iconURL;
+            }
+
             if (prevState?.model != null && prevState.model !== submissionConvo.model) {
               update.model = prevState.model;
             }

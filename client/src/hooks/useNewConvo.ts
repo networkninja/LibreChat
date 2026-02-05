@@ -98,10 +98,21 @@ const useNewConvo = (index = 0) => {
             activePreset.presetId &&
             activePreset.presetId === defaultPreset?.presetId);
         if (buildDefaultConversation) {
-          let defaultEndpoint = getDefaultEndpoint({
-            convoSetup: activePreset ?? conversation,
-            endpointsConfig,
-          });
+          const hasModelSpec = activePreset?.spec != null && activePreset.spec !== '';
+          let defaultEndpoint: EModelEndpoint | null;
+
+          if (hasModelSpec && activePreset?.endpoint) {
+            // Model spec is active - use its endpoint
+            defaultEndpoint = activePreset.endpoint as EModelEndpoint;
+            console.log('🔍 [useNewConvo] Using model spec endpoint:', defaultEndpoint);
+          } else {
+            // No model spec - use getDefaultEndpoint logic
+            defaultEndpoint =
+              getDefaultEndpoint({
+                convoSetup: activePreset ?? conversation,
+                endpointsConfig,
+              }) ?? null;
+          }
 
           if (!defaultEndpoint) {
             defaultEndpoint = Object.keys(endpointsConfig ?? {})[0] as EModelEndpoint;
